@@ -1,0 +1,7 @@
+[model]
+temperature = 1
+
+
+[mcp_server.filesystem]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-filesystem", "/home/darklord/Documents/Agentic-AI-/nexus_agent", "/tmp"]
