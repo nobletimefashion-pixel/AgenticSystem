@@ -221,6 +221,22 @@ class Connection:
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
     await ws.accept()
+
+    # ── Token auth (only enforced when UI_SECRET env var is set) ─────────────
+    # On Render: set  UI_SECRET=some-long-random-string  in Environment Variables
+    # Users connect to:  wss://your-app.onrender.com/ws?token=some-long-random-string
+    required_token = os.environ.get("UI_SECRET", "")
+    if required_token:
+        provided_token = ws.query_params.get("token", "")
+        if provided_token != required_token:
+            await ws.send_text(json.dumps({
+                "type":  "agent_error",
+                "error": "❌ Unauthorized — invalid or missing token. "
+                         "Add ?token=YOUR_SECRET to the WebSocket URL in Settings."
+            }))
+            await ws.close(code=4001, reason="Unauthorized")
+            return
+
     conn = Connection(ws)
     await conn.send_system_info()
 

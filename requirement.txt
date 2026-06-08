@@ -1,0 +1,48 @@
+# ── RENDER DEPLOYMENT — slim build ───────────────────────────────────────────
+# Heavy optional tools (playwright, moviepy, RAG, etc.) are NOT installed here.
+# They will fail gracefully with "install X to use this tool" if called.
+# This keeps the build under Render's 512 MB free-tier RAM limit.
+
+# Web UI server
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+websockets==13.1
+
+# LLM client
+openai==1.57.2
+
+# MCP
+fastmcp==2.3.4
+
+# Config / CLI
+click==8.1.8
+tomli==2.2.1
+platformdirs==4.3.6
+pydantic==2.10.3
+
+# Terminal UI (still used for logging)
+rich==13.9.4
+
+# Token counting
+tiktoken==0.8.0
+
+# HTTP clients
+httpx==0.28.1
+requests==2.32.3
+
+# Web scraping
+beautifulsoup4==4.12.3
+ddgs==7.2.0
+
+# PDF / DOCX generation
+reportlab==4.2.5
+python-docx==1.1.2
+
+# Anthropic SDK (software_architect tool)
+anthropic==0.40.0
+
+# OS monitoring
+psutil==6.1.1
+
+# OSINT - lightweight ones only
+python-whois==0.9.4

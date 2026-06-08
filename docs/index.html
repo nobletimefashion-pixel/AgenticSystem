@@ -622,8 +622,12 @@ input,textarea{font-family:inherit;color:inherit}
       <div class="settings-field">
         <label>WebSocket URL</label>
         <input type="text" id="ws-url-input" value="ws://127.0.0.1:7860/ws"/>
-        <button class="apply-btn" onclick="reconnect()">Reconnect</button>
       </div>
+      <div class="settings-field">
+        <label>Access Token <span style="color:var(--tx2);font-size:10px">(leave blank if not set)</span></label>
+        <input type="password" id="ws-token-input" placeholder="your UI_SECRET value"/>
+      </div>
+      <button class="apply-btn" onclick="reconnect()" style="width:100%;margin-top:4px">Reconnect</button>
     </div>
   </div>
 </div>
@@ -662,9 +666,19 @@ function connect(url) {
   };
 }
 
+function buildWsUrl() {
+  let url   = document.getElementById('ws-url-input').value.trim();
+  const tok = (document.getElementById('ws-token-input') || {}).value || '';
+  if (tok.trim() && url) {
+    const sep = url.includes('?') ? '&' : '?';
+    url = `${url}${sep}token=${encodeURIComponent(tok.trim())}`;
+  }
+  return url;
+}
+
 function reconnect() {
   if (ws) ws.close();
-  connect(document.getElementById('ws-url-input').value);
+  connect(buildWsUrl());
 }
 
 function send(obj) {
@@ -1067,9 +1081,43 @@ function escHtml(str) {
 }
 
 // ── BOOT ──────────────────────────────────────────────────────────────────
-const wsUrl = new URLSearchParams(window.location.search).get('ws')
-           || 'wss://your-app.onrender.com/ws';
-connect(wsUrl);
+// ▼▼▼  ONLY LINE YOU EDIT AFTER DEPLOYING TO RENDER  ▼▼▼
+// Replace the placeholder below with your actual Render URL, e.g.:
+//   const DEPLOYED_BACKEND = 'wss://nexus-agent.onrender.com/ws';
+const DEPLOYED_BACKEND = 'wss://YOUR-APP-NAME.onrender.com/ws';
+// ▲▲▲  THAT'S IT  ▲▲▲
+
+// Resolution order:
+//  1. ?ws=wss://...  in the page URL  → lets anyone point at their own backend
+//  2. ?token=...     in the page URL  → auto-fills the token field
+//  3. DEPLOYED_BACKEND constant above → your Render deployment
+//  4. localhost fallback              → local dev
+(function () {
+  const params   = new URLSearchParams(window.location.search);
+  const fromUrl  = params.get('ws');
+  const fromTok  = params.get('token');
+
+  // pre-fill token field if passed in URL
+  if (fromTok) {
+    const tokEl = document.getElementById('ws-token-input');
+    if (tokEl) tokEl.value = fromTok;
+  }
+
+  const isLocal  = ['localhost', '127.0.0.1', ''].includes(window.location.hostname);
+  const local    = 'ws://127.0.0.1:7860/ws';
+  const deployed = DEPLOYED_BACKEND.includes('YOUR-APP-NAME') ? null : DEPLOYED_BACKEND;
+
+  const baseUrl  = fromUrl || (isLocal ? local : deployed) || local;
+
+  document.getElementById('ws-url-input').value = baseUrl;
+
+  if (!baseUrl) {
+    setStatus('Enter your backend URL in Settings → Connection', false);
+    return;
+  }
+
+  connect(buildWsUrl());
+}());
 </script>
 </body>
 </html>
