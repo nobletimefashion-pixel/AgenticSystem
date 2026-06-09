@@ -8,6 +8,7 @@ from Tools.subagents import SubAgentTool, get_default_subagents_definitions
 from config.config import Config
 from Tools.builtin.rag import RAGTool 
 from client.llm_client import LLMClient
+from hooks.hook_system import HookSystem
 from safety.approval import ApprovalContext, ApprovalDecision, ApprovalManager
 
 
@@ -17,6 +18,10 @@ class ToolRegistry:
         self._tools: dict[str, Tool] = {}#this creates a dictionary that maps the name of the tool to the tool object. This allows us to easily get the tool by name when it is being executed by the agent and also to display the list of available tools in the tool box when we are using openai api to display the tools in the tool box.
         self._mcp_tools: dict[str, Tool] = {}
         self.config = config
+
+    @property
+    def connected_mcp_servers(self) -> list[Tool]:
+        return self._mcp_tools.values()
 
     def register(self, tool: Tool):
         if tool.name in self._tools:
@@ -56,20 +61,25 @@ class ToolRegistry:
         return tools
     def get_schema(self) -> list[dict[str, Any]]:
         return [tool.to_openai_schema() for tool in self.get_tools()]
-    async def invoke(self, name: str, params:dict[str, Any], cwd:Path,approval_manager:ApprovalManager | None = None) -> ToolResult:
+    async def invoke(self, name: str, params:dict[str, Any], cwd:Path,hook_system:HookSystem,approval_manager:ApprovalManager | None = None) -> ToolResult:
         tool = self.get(name)
         if tool is None:
-            return ToolResult.error_result(
+            result = ToolResult.error_result(
                 f"Unknown tool {name}",
                 metadata={"tool_name: " :name}
             )
+            await hook_system.trigger_after_tool(name, params, result)
+            return result
             
         validate_errors = tool.validate_params(params)
         if validate_errors:
-            return ToolResult.error_result(
+            result = ToolResult.error_result(
                 f"Invalid Parameter :{' '.join(validate_errors)}",
             )
-            
+            await hook_system.trigger_after_tool(name, params, result)
+            return result
+        
+        await hook_system.trigger_before_tool(name, params)
         Invokation = ToolInvokation(
             cwd=cwd,
             params=params
@@ -85,11 +95,15 @@ class ToolRegistry:
                 )
                 decision = await approval_manager.check_approval(context)
                 if decision == ApprovalDecision.REJECTED:
-                    return ToolResult.error_result(f"Operation was rejected by safety policy")
+                    result = ToolResult.error_result(f"Operation was rejected by safety policy")
+                    await hook_system.trigger_after_tool(name, params, result)
+                    return result
                 elif decision == ApprovalDecision.NEEDS_CONFIRMATION:
                     approval = approval_manager.request_confirmation(confirmation)
                     if not approval:
-                        return ToolResult.error_result("User rejected the operation")
+                        result = ToolResult.error_result("User rejected the operation")
+                        await hook_system.trigger_after_tool(name, params, result)
+                        return result
         try:
            result = await tool.execute(Invokation)
         except Exception as e:
@@ -97,6 +111,7 @@ class ToolRegistry:
             result = ToolResult.error_result(
                 f"internal error {e}",metadata={f"Tool_name": name}
             )
+        await hook_system.trigger_after_tool(name, params, result)
         return result
 
 

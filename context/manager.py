@@ -41,7 +41,13 @@ class ContextManager:
         self._model_name = self.config.model_name
         self._messages:list[MessageItem] = []
         self._latest_usage = TokenUsage()
-        self._total_usage = TokenUsage()
+        self.total_usage = TokenUsage()
+
+    @property
+    def message_count(self) -> int:
+        return len(self._messages)
+
+ 
         
     def add_user_message(self, content: str) -> None:
         item = MessageItem(
@@ -95,7 +101,7 @@ class ContextManager:
         self._latest_usage = usage
     
     def add_usage(self, usage: TokenUsage):
-        self._total_usage += usage
+        self.total_usage += usage
         
     def replace_with_summary(self, summary: str) -> None:
         self._messages = []

@@ -1,6 +1,19 @@
+hooks_enabled=true
+
 [model]
 temperature = 1
 
+
+# it is a list so it is passed like this
+[[hooks]]
+name='test_tool'
+trigger='before_tool'
+command='python3 ./scripts/test_tool.py'
+
+[[hooks]]
+name='test_tool2'
+trigger='before_agent'
+command='python3 ./scripts/test_tool.py'
 
 [mcp_server.filesystem]
 command = "npx"

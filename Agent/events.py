@@ -18,6 +18,7 @@ class AgentEventType(str,Enum):
     TEXT_COMPLETE = "text_complete"
     TOOL_CALL_START = "tool_call_start"
     TOOL_CALL_COMPLETE = "tool_call_complete"
+    LOOP_DETECTOR = "loop_detector"
 
 @dataclass
 class AgentEvent:
@@ -81,4 +82,10 @@ class AgentEvent:
                 'truncated': result.truncated,
                 'exit_code': result.exit_code,
             }
+        )
+    @classmethod
+    def loop_detector(cls, content:str) -> AgentEvent:
+        return cls(
+            type=AgentEventType.LOOP_DETECTOR,
+            data={'content': content},
         )
