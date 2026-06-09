@@ -30,6 +30,7 @@ The server streams JSON back:
 from __future__ import annotations
 
 import asyncio
+import io
 import json
 import os
 import sys
@@ -78,6 +79,107 @@ async def root():
     if _UI_HTML_PATH.exists():
         return HTMLResponse(_UI_HTML_PATH.read_text(encoding="utf-8"))
     return HTMLResponse("<h1>UI file not found. Place nexus_ui.html next to server.py</h1>")
+
+
+# ── File browser + download endpoints ────────────────────────────────────────
+import zipfile, mimetypes
+from fastapi import Query
+from fastapi.responses import FileResponse, StreamingResponse
+
+def _check_token(token: str = "") -> bool:
+    """Validate the download token (same secret as WebSocket)."""
+    required = os.environ.get("UI_SECRET", "")
+    return not required or token == required
+
+@app.get("/files")
+async def list_files(
+    path:  str   = Query(".", description="Directory path relative to project root"),
+    token: str   = Query("",  description="UI_SECRET token"),
+):
+    """Return a JSON list of files/dirs at the given path."""
+    if not _check_token(token):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    base = Path.cwd()
+    target = (base / path).resolve()
+
+    # Safety: never escape the project root
+    if not str(target).startswith(str(base)):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    if not target.exists():
+        return {"error": f"Path not found: {path}", "items": []}
+
+    items = []
+    if target.is_file():
+        items.append({
+            "name": target.name,
+            "path": str(target.relative_to(base)),
+            "type": "file",
+            "size": target.stat().st_size,
+        })
+    else:
+        for item in sorted(target.iterdir(), key=lambda p: (p.is_file(), p.name)):
+            items.append({
+                "name":  item.name,
+                "path":  str(item.relative_to(base)),
+                "type":  "file" if item.is_file() else "dir",
+                "size":  item.stat().st_size if item.is_file() else None,
+            })
+
+    return {"cwd": str(base), "path": str(target.relative_to(base)), "items": items}
+
+
+@app.get("/download")
+async def download_file(
+    path:  str = Query(..., description="File or directory path relative to project root"),
+    token: str = Query("",  description="UI_SECRET token"),
+):
+    """
+    Download a single file, or a directory as a .zip archive.
+    Example: GET /download?path=my_project&token=SECRET
+    """
+    if not _check_token(token):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    base   = Path.cwd()
+    target = (base / path).resolve()
+
+    if not str(target).startswith(str(base)):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    if not target.exists():
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail=f"Not found: {path}")
+
+    # Single file → serve directly
+    if target.is_file():
+        media_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+        return FileResponse(
+            path=str(target),
+            filename=target.name,
+            media_type=media_type,
+        )
+
+    # Directory → zip it on the fly and stream to browser
+    def _zip_generator():
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for file in target.rglob("*"):
+                if file.is_file():
+                    zf.write(file, file.relative_to(target))
+        buf.seek(0)
+        yield buf.read()
+
+    return StreamingResponse(
+        _zip_generator(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{target.name}.zip"'},
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -314,14 +416,23 @@ def launch(host: str = "127.0.0.1", port: int = 7860, open_browser: bool = True)
         threading.Thread(target=_open, daemon=True).start()
 
     print(f"\n🌐  Nexus Agent UI  →  http://{host}:{port}\n")
-    uvicorn.run(app, host=host, port=port, log_level="warning")
+    uvicorn.run(app, host=host, port=port, log_level="info")
+
+
+def _cli():
+    """Entry point for both  python ui/server.py  and  python -m ui.server"""
+    import argparse
+    ap = argparse.ArgumentParser(description="Nexus Agent Web UI Server")
+    ap.add_argument("--host",       default=os.environ.get("HOST", "127.0.0.1"),
+                    help="Bind host (default: 127.0.0.1, Render sets 0.0.0.0)")
+    ap.add_argument("--port",       type=int,
+                    default=int(os.environ.get("PORT", 7860)),
+                    help="Bind port (default: 7860, Render sets $PORT automatically)")
+    ap.add_argument("--no-browser", action="store_true",
+                    help="Do not open a browser tab on startup")
+    args = ap.parse_args()
+    launch(args.host, args.port, open_browser=not args.no_browser)
 
 
 if __name__ == "__main__":
-    import argparse
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--host", default="127.0.0.1")
-    ap.add_argument("--port", type=int, default=7860)
-    ap.add_argument("--no-browser", action="store_true")
-    args = ap.parse_args()
-    launch(args.host, args.port, open_browser=not args.no_browser)
+    _cli()

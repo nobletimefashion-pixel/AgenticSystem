@@ -451,6 +451,20 @@ input,textarea{font-family:inherit;color:inherit}
 .hl-kw{color:#c792ea}.hl-str{color:#c3e88d}.hl-num{color:#f78c6c}
 .hl-cm{color:var(--tx2);font-style:italic}.hl-fn{color:#82aaff}
 .hl-op{color:var(--acc)}.hl-cls{color:var(--ylw)}
+
+/* ── FILE BROWSER ────────────────────────────────────────────────────────── */
+.fb-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:6px 10px;border-bottom:1px solid var(--bg3);
+  white-space:nowrap;overflow:hidden;
+}
+.fb-row:last-child{border-bottom:none}
+.fb-row span:first-child{
+  overflow:hidden;text-overflow:ellipsis;color:var(--tx1);
+}
+.fb-dir{cursor:pointer}
+.fb-dir:hover{background:var(--bg2)}
+.fb-dir span{color:var(--ylw)}
 </style>
 </head>
 <body>
@@ -613,6 +627,22 @@ input,textarea{font-family:inherit;color:inherit}
     </div>
 
     <div class="settings-group">
+      <div class="settings-group-label">📁 Server Files</div>
+      <div style="font-size:11px;color:var(--tx2);margin-bottom:8px;line-height:1.5">
+        Files the agent created on the server. Click any file or folder to download it.
+      </div>
+      <button class="apply-btn" onclick="loadFiles('.')" style="width:100%;margin-bottom:8px">
+        🔄 Refresh files
+      </button>
+      <div id="file-browser" style="
+        background:var(--bg0);border:1px solid var(--bg4);border-radius:6px;
+        max-height:300px;overflow-y:auto;font-family:var(--font-mono);font-size:11px;
+      ">
+        <div style="padding:12px;color:var(--tx2)">Click "Refresh files" to browse server files</div>
+      </div>
+    </div>
+
+    <div class="settings-group">
       <div class="settings-group-label">Available Tools</div>
       <div id="tools-list" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px"></div>
     </div>
@@ -724,6 +754,7 @@ function handleMsg(msg) {
 
     case 'tool_complete':
       updateToolCard(msg);
+      maybeRefreshFiles(msg.name || '');
       scrollBottom();
       break;
 
@@ -1078,6 +1109,111 @@ function escHtml(str) {
   return String(str)
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;');
+}
+
+// ── FILE BROWSER & DOWNLOAD ───────────────────────────────────────────────
+function getHttpBase() {
+  // Convert wss:// → https://, ws:// → http://
+  const wsUrl = document.getElementById('ws-url-input').value.trim()
+                .replace('/ws', '').replace(/\?.*/, '');
+  return wsUrl.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:');
+}
+
+function getToken() {
+  return (document.getElementById('ws-token-input') || {}).value || '';
+}
+
+async function loadFiles(path) {
+  const base  = getHttpBase();
+  const token = getToken();
+  const fb    = document.getElementById('file-browser');
+  if (!fb) return;
+
+  fb.innerHTML = '<div style="padding:12px;color:var(--tx2)">Loading…</div>';
+
+  try {
+    const url  = `${base}/files?path=${encodeURIComponent(path)}&token=${encodeURIComponent(token)}`;
+    const resp = await fetch(url);
+    const data = await resp.json();
+
+    if (data.error) {
+      fb.innerHTML = `<div style="padding:12px;color:var(--red)">${escHtml(data.error)}</div>`;
+      return;
+    }
+
+    let html = '';
+
+    // Back button (unless already at root)
+    if (path !== '.' && path !== '') {
+      const parent = path.split('/').slice(0, -1).join('/') || '.';
+      html += `<div class="fb-row fb-dir" onclick="loadFiles('${escHtml(parent)}')">
+        <span style="color:var(--acc)">← ..</span>
+      </div>`;
+    }
+
+    for (const item of data.items) {
+      if (item.type === 'dir') {
+        html += `<div class="fb-row fb-dir" onclick="loadFiles('${escHtml(item.path)}')">
+          <span>📁 ${escHtml(item.name)}/</span>
+        </div>`;
+      } else {
+        const size = item.size > 1024*1024
+          ? (item.size/1024/1024).toFixed(1) + ' MB'
+          : item.size > 1024
+          ? (item.size/1024).toFixed(1) + ' KB'
+          : item.size + ' B';
+        html += `<div class="fb-row">
+          <span>📄 ${escHtml(item.name)}</span>
+          <span style="display:flex;align-items:center;gap:8px">
+            <span style="color:var(--tx2);font-size:10px">${size}</span>
+            <button onclick="downloadFile('${escHtml(item.path)}')" style="
+              padding:2px 8px;border-radius:4px;background:var(--bg3);
+              border:1px solid var(--bg4);color:var(--acc);font-size:10px;
+              cursor:pointer;font-family:var(--font-mono);
+            ">⬇ Download</button>
+          </span>
+        </div>`;
+      }
+    }
+
+    if (!data.items.length) {
+      html = '<div style="padding:12px;color:var(--tx2)">Empty directory</div>';
+    }
+
+    fb.innerHTML = html;
+
+  } catch(e) {
+    fb.innerHTML = `<div style="padding:12px;color:var(--red)">
+      Failed to load files. Is the backend reachable?<br>
+      <span style="font-size:10px">${escHtml(String(e))}</span>
+    </div>`;
+  }
+}
+
+function downloadFile(path) {
+  const base  = getHttpBase();
+  const token = getToken();
+  // Trigger download by navigating to the endpoint
+  const url = `${base}/download?path=${encodeURIComponent(path)}&token=${encodeURIComponent(token)}`;
+  const a   = document.createElement('a');
+  a.href    = url;
+  a.download = path.split('/').pop();
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+function downloadDir(path) {
+  downloadFile(path);   // same endpoint — backend zips directories automatically
+}
+
+// Auto-refresh files panel whenever agent completes a tool that writes files
+const _WRITE_TOOLS = new Set(['write_file','edit','software_architect','report_generator']);
+function maybeRefreshFiles(toolName) {
+  if (_WRITE_TOOLS.has(toolName)) {
+    // small delay so the file is fully written before we list it
+    setTimeout(() => loadFiles('.'), 800);
+  }
 }
 
 // ── BOOT ──────────────────────────────────────────────────────────────────
