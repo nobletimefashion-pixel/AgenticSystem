@@ -28,11 +28,9 @@ from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 
 # ── locate project root ───────────────────────────────────────────────────────
 _HERE = Path(__file__).parent.resolve()
-_ROOT = _HERE
-for _c in [_HERE, _HERE.parent, _HERE.parent.parent]:
-    if (_c / "Agent").is_dir() and (_c / "Tools").is_dir():
-        _ROOT = _c
-        break
+_ROOT = _HERE.parent  # ui/ sits one level below the project root
+if not (_ROOT / "Agent").is_dir() or not (_ROOT / "Tools").is_dir():
+    _ROOT = _HERE
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
@@ -169,7 +167,7 @@ class Connection:
             "tool_name":   conf.tool_name,
             "description": conf.description,
             "command":     conf.command,
-            "diff":        conf.diff.create_diff() if conf.diff else None,
+            "diff":        conf.diff.create_diff() if conf.diff and hasattr(conf.diff, 'create_diff') else None,
             "is_dangerous": conf.is_dangerous,
         })
         await self._confirm_evt.wait()
@@ -220,6 +218,8 @@ class Connection:
 
     async def run_message(self, content: str, agent: Agent):
         self._interrupt = False
+        created_files: list[dict] = []          # ← NEW
+        
         async for event in agent.run(content):
             if self._interrupt:
                 break
@@ -227,11 +227,11 @@ class Connection:
 
             if t == AgentEventType.TEXT_DELTA:
                 await self.send({"type": "text_delta",
-                                 "content": event.data.get("content", "")})
+                                "content": event.data.get("content", "")})
 
             elif t == AgentEventType.TEXT_COMPLETE:
                 await self.send({"type": "text_complete",
-                                 "content": event.data.get("content", "")})
+                                "content": event.data.get("content", "")})
 
             elif t == AgentEventType.TOOL_CALL_START:
                 kind = None
@@ -250,6 +250,21 @@ class Connection:
                 })
 
             elif t == AgentEventType.TOOL_CALL_COMPLETE:
+                # ── track written files ───────────────────────────────── NEW
+                tool_name = event.data.get("name", "")
+                if tool_name in ("write_file", "edit_file", "edit",
+                                "software_architect", "report_generator"):
+                    meta = event.data.get("metadata") or {}
+                    fpath = meta.get("path") or (event.data.get("arguments") or {}).get("path")
+                    if fpath and event.data.get("success"):
+                        # avoid duplicates
+                        if not any(f["path"] == fpath for f in created_files):
+                            created_files.append({
+                                "path": fpath,
+                                "name": Path(fpath).name,
+                                "is_new": meta.get("is_new_file", False),
+                            })
+                # ─────────────────────────────────────────────────────────
                 await self.send({
                     "type":      "tool_complete",
                     "call_id":   event.data.get("call_id", ""),
@@ -265,13 +280,16 @@ class Connection:
 
             elif t == AgentEventType.LOOP_DETECTOR:
                 await self.send({"type": "loop_detected",
-                                 "content": event.data.get("content", "")})
+                                "content": event.data.get("content", "")})
 
             elif t == AgentEventType.AGENT_ERROR:
                 await self.send({"type": "agent_error",
-                                 "error": event.data.get("error", "Unknown error")})
+                                "error": event.data.get("error", "Unknown error")})
 
             elif t == AgentEventType.AGENT_END:
+                # emit file cards before agent_end               ← NEW
+                if created_files:
+                    await self.send({"type": "files_created", "files": created_files})
                 await self.send({"type": "agent_end"})
 
 
@@ -407,15 +425,21 @@ async def websocket_endpoint(ws: WebSocket):
                                          "error": f"Session not found: {session_id}"})
                         continue
                     await _close_agent()
-                    # Build a fresh session and replay messages
                     session = Session(config=conn.config)
                     await session.initialize()
-                    session.session_id = snap.session_id
-                    session.created_at = snap.created_at
-                    session.updated_at = snap.updated_at
-                    session.turn_count = snap.turn_count
-                    session.context_manager.total_usage = snap.total_usage
-                    session.replay_messages(snap.messages)
+                    restore_attrs = {
+                        "session_id": snap.session_id,
+                        "created_at": snap.created_at,
+                        "updated_at": snap.updated_at,
+                        "turn_count": snap.turn_count,
+                    }
+                    for attr, val in restore_attrs.items():
+                        if hasattr(session, attr):
+                            setattr(session, attr, val)
+                    if hasattr(session, "context_manager") and hasattr(session.context_manager, "total_usage"):
+                        session.context_manager.total_usage = snap.total_usage
+                    if hasattr(session, "replay_messages"):
+                        session.replay_messages(snap.messages)
                     # Wrap in Agent shell
                     new_agent          = Agent(conn.config, confirmation_callback=conn.ask_confirm)
                     new_agent.session  = session
@@ -512,6 +536,21 @@ async def websocket_endpoint(ws: WebSocket):
                     agent = await _ensure_agent()
                     stats = agent.session.get_stats()
                     await conn.send({"type": "stats", "data": stats})
+                except Exception as e:
+                    await conn.send({"type": "agent_error", "error": str(e)})
+
+            # ── get_config ────────────────────────────────────────────────────
+            elif kind == "get_config":
+                try:
+                    cfg = conn.config
+                    await conn.send({"type": "config", "data": {
+                        "model": cfg.model_name,
+                        "temperature": cfg.temperature,
+                        "approval": cfg.approval.value,
+                        "cwd": str(cfg.cwd),
+                        "max_turns": cfg.max_turns,
+                        "hooks_enabled": cfg.hooks_enabled,
+                    }})
                 except Exception as e:
                     await conn.send({"type": "agent_error", "error": str(e)})
 

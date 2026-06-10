@@ -468,6 +468,73 @@ a{color:var(--acc-l);text-decoration:none}
   #sidebar.mobile-open{display:flex;position:fixed;left:0;top:0;bottom:0;z-index:90;
     width:var(--sidebar-w)!important;opacity:1!important;pointer-events:all!important}
   .tb-title{display:none}}
+
+/* ── FILE DOWNLOAD CARDS ─────────────────────────────────────────────── */
+.files-bar{
+  display:flex;flex-direction:column;gap:6px;
+  padding:10px 14px;background:var(--bg2);
+  border:1px solid var(--bg4);border-radius:var(--r-md);
+  animation:slideUp .16s ease}
+.files-bar-lbl{
+  font-size:10px;font-weight:600;text-transform:uppercase;
+  letter-spacing:.09em;color:var(--tx2);margin-bottom:2px}
+.file-card{
+  display:flex;align-items:center;gap:10px;
+  padding:8px 11px;border-radius:var(--r-sm);
+  background:var(--bg3);border:1px solid var(--bg5);
+  cursor:pointer;transition:border-color .12s,background .12s}
+.file-card:hover{border-color:var(--acc);background:var(--bg4)}
+.file-card-icon{
+  width:28px;height:28px;border-radius:5px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:13px}
+.fc-new .file-card-icon{background:var(--grn-bg);color:var(--grn)}
+.fc-edit .file-card-icon{background:var(--ylw-bg);color:var(--ylw)}
+.file-card-info{flex:1;min-width:0}
+.file-card-name{
+  font-size:12.5px;font-weight:500;color:var(--tx0);
+  font-family:var(--f-mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.file-card-path{
+  font-size:10px;color:var(--tx2);font-family:var(--f-mono);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.file-card-badge{
+  font-size:9px;padding:2px 7px;border-radius:99px;flex-shrink:0;font-weight:600}
+.fc-new .file-card-badge{background:var(--grn-bg);color:var(--grn)}
+.fc-edit .file-card-badge{background:var(--ylw-bg);color:var(--ylw)}
+.file-card-dl{
+  width:26px;height:26px;border-radius:4px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--acc-soft);color:var(--acc-l);
+  border:1px solid rgba(99,102,241,.25);
+  transition:background .1s,border-color .1s;font-size:12px}
+.file-card-dl:hover{background:var(--acc-glow);border-color:var(--acc)}
+
+/* file preview modal */
+#file-preview-overlay{
+  display:none;position:fixed;inset:0;z-index:400;
+  background:rgba(0,0,0,.75);backdrop-filter:blur(6px);
+  align-items:center;justify-content:center;padding:24px}
+#file-preview-overlay.visible{display:flex}
+.fp-box{
+  background:var(--bg1);border:1px solid var(--bg5);border-radius:var(--r-lg);
+  width:min(820px,100%);max-height:85vh;display:flex;flex-direction:column;
+  box-shadow:var(--shadow);animation:slideUp .18s ease}
+.fp-head{
+  padding:14px 18px;border-bottom:1px solid var(--bg3);
+  display:flex;align-items:center;gap:10px;flex-shrink:0}
+.fp-title{flex:1;font-size:13px;font-weight:600;font-family:var(--f-mono);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tx0)}
+.fp-dl-btn{
+  padding:5px 13px;border-radius:var(--r-sm);background:var(--acc);
+  color:#fff;font-size:12px;font-weight:500;flex-shrink:0;
+  transition:background .1s}
+.fp-dl-btn:hover{background:var(--acc-l)}
+.fp-body{flex:1;overflow-y:auto;padding:0}
+.fp-pre{
+  padding:16px 18px;font-family:var(--f-mono);font-size:12px;
+  line-height:1.65;color:var(--tx1);white-space:pre-wrap;word-break:break-all;
+  margin:0}
+.fp-loading{padding:30px;text-align:center;color:var(--tx2);font-size:12px}
 </style>
 </head>
 <body>
@@ -624,23 +691,7 @@ a{color:var(--acc-l);text-decoration:none}
   <div id="cmd-suggestions"></div>
 
   <div id="chat-wrap">
-    <div id="chat-inner">
-      <div class="empty" id="empty-state">
-        <div class="empty-mark">N</div>
-        <div class="empty-title">What can I help you build?</div>
-        <div class="empty-sub">Full access to filesystem, shell, web, and a powerful tool suite. Type <code style="background:var(--bg3);padding:1px 5px;border-radius:3px;color:var(--acc-l);font-family:var(--f-mono)">/</code> for commands.</div>
-        <div class="chips">
-          <div class="chip" onclick="quickSend('List all files in the current directory')">📁 List files</div>
-          <div class="chip" onclick="quickSend('Show system info and running processes')">📊 System info</div>
-          <div class="chip" onclick="quickSend('Search the web for the latest AI news')">🌐 Web search</div>
-          <div class="chip" onclick="quickSend('Build a SaaS task manager with Next.js and FastAPI')">🏗️ Build SaaS</div>
-          <div class="chip" onclick="quickSend('Run an OWASP security audit on https://example.com')">🛡️ Security audit</div>
-          <div class="chip" onclick="quickSend('Create a PDF report about machine learning in 2025')">📄 Create PDF</div>
-          <div class="chip" onclick="quickSend('Monitor the system for suspicious processes')">🔒 OS security</div>
-          <div class="chip" onclick="showCmd()">⌘ Show commands</div>
-        </div>
-      </div>
-    </div>
+    <div id="chat-inner" style="padding:40px 20px;text-align:center;color:var(--tx2);font-size:13px">Loading…</div>
   </div>
 
   <div id="input-wrap">
@@ -660,6 +711,21 @@ a{color:var(--acc-l);text-decoration:none}
     </div>
   </div>
 </div><!-- /#main -->
+<!-- ══ FILE PREVIEW ══════════════════════════════════════════════════════════ -->
+<div id="file-preview-overlay" onclick="closeFP(event)">
+  <div class="fp-box" onclick="event.stopPropagation()">
+    <div class="fp-head">
+      <span class="fp-title" id="fp-title">file.txt</span>
+      <button class="fp-dl-btn" id="fp-dl-btn" onclick="fpDownload()">⬇ Download</button>
+      <button class="tb-btn" onclick="closeFP()" style="flex-shrink:0">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="fp-body">
+      <pre class="fp-pre" id="fp-content"><span class="fp-loading">Loading…</span></pre>
+    </div>
+  </div>
+</div>
 </div><!-- /#app -->
 
 <!-- ══ CONFIRM ═══════════════════════════════════════════════════════════════ -->
@@ -750,10 +816,34 @@ let cmdFocused = 0;   // focused index in suggestion list
 // ═══════════════════════════════════════════════════════
 const COMMANDS = [
   { name:'/help',       desc:'Show all available commands',
-    run: ()=> addSysMsg('ℹ️','Available: /help /clear /save /checkpoint /stats /tools /mcp /model /approval /cwd') },
-  { name:'/clear',      desc:'Clear conversation context',
-    run: ()=> send({type:'clear_context'}) },
-  { name:'/save',       desc:'Save current session to disk',
+    run: ()=> addMarkdownMsg(`\
+## Commands
+
+- \`/help\` — Show this help
+- \`/clear\` — Clear conversation history
+- \`/config\` — Show current configuration
+- \`/save\` — Save current session
+- \`/checkpoint\` — Create a checkpoint
+- \`/stats\` — Show session statistics
+- \`/tools\` — List available tools
+- \`/mcp\` — Show MCP server status
+- \`/hooks\` — Manage hooks
+- \`/model <name>\` — Change the AI model
+- \`/approval <mode>\` — Set approval policy (on-request / auto / yolo)
+- \`/cwd <path>\` — Change working directory
+- \`/sessions\` — List saved sessions
+
+## Tips
+
+- Just type your message to chat with the agent
+- The agent can read, write, and execute code
+- Some operations require approval (can be configured)
+`)},
+  { name:'/clear',      desc:'Clear conversation history',
+    run: ()=>{ addSysMsg('🗑️','Clearing conversation context…'); send({type:'clear_context'}); }},
+  { name:'/config',     desc:'Show current configuration',
+    run: ()=> send({type:'get_config'}) },
+  { name:'/save',       desc:'Save current session',
     run: ()=> send({type:'save_session'}) },
   { name:'/checkpoint', desc:'Create a checkpoint of current state',
     run: ()=> send({type:'checkpoint'}) },
@@ -761,12 +851,12 @@ const COMMANDS = [
     run: ()=> send({type:'get_stats'}) },
   { name:'/tools',      desc:'List available tools',
     run: ()=> toggleSettings() },
-  { name:'/mcp',        desc:'Manage MCP servers (opens sidebar)',
+  { name:'/mcp',        desc:'Show MCP server status (opens sidebar)',
     run: ()=> sbTab('mcp', document.querySelectorAll('.sb-tab')[1]) },
   { name:'/hooks',      desc:'Manage hooks (opens sidebar)',
     run: ()=> sbTab('hooks', document.querySelectorAll('.sb-tab')[2]) },
   { name:'/model',      desc:'Change the AI model  e.g. /model gpt-4o',
-    run: (args)=> { if(args){ setModel(args); syncModelSel(args); } else toggleSettings(); }},
+    run: (args)=> { if(args){ addSysMsg('⚙️',`Setting model to: ${args}`); setModel(args); syncModelSel(args); } else toggleSettings(); }},
   { name:'/approval',   desc:'Set approval policy  on-request|auto|yolo|never',
     run: (args)=> { if(args){ send({type:'set_approval', policy:args}); addSysMsg('⚙️',`Approval policy → ${args}`);} }},
   { name:'/cwd',        desc:'Change working directory  e.g. /cwd /home/user/proj',
@@ -820,6 +910,11 @@ function handleMsg(msg){
       renderMcpSidebar(msg.mcp_servers||[]);
       renderHooksSidebar(msg.hooks||[]);
       renderSessionsSidebar(msg.sessions||[]);
+      break;
+    
+    
+    case 'files_created':
+      addFileCards(msg.files);
       break;
 
     case 'text_delta':
@@ -887,11 +982,29 @@ function handleMsg(msg){
     case 'mcp_removed':
       addSysMsg('🔌',`MCP server removed: ${msg.name}`); break;
 
+    // config
+    case 'config':
+      const cd=msg.data||{};
+      addMarkdownMsg(`\
+## Current Configuration
+
+- **Model:** \`${esc(cd.model||'—')}\`
+- **Temperature:** \`${cd.temperature??'—'}\`
+- **Approval:** \`${esc(cd.approval||'—')}\`
+- **Working Dir:** \`${esc(cd.cwd||'—')}\`
+- **Max Turns:** \`${cd.max_turns??'—'}\`
+- **Hooks:** ${cd.hooks_enabled?'✅ Enabled':'❌ Disabled'}
+`);
+      break;
+
     // stats
     case 'stats':
       const d=msg.data||{};
-      const lines=Object.entries(d).map(([k,v])=>`  ${k}: ${JSON.stringify(v)}`).join('\n');
-      addSysMsg('📊',`Session stats:\n${lines}`);
+      addMarkdownMsg(`\
+## Session Statistics
+
+${Object.entries(d).map(([k,v])=>'- **' + esc(k) + ':** `' + esc(JSON.stringify(v)) + '`').join('\n')}
+`);
       break;
   }
 }
@@ -912,16 +1025,15 @@ function sendMessage(){
 }
 function quickSend(t){ document.getElementById('msg-input').value=t; sendMessage(); }
 function handleKey(e){
+  if(e.key==='/'){
+    e.preventDefault();
+    openCmdBar('');
+    return;
+  }
   if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendMessage(); }
 }
 function handleInput(ta){
   autoResize(ta);
-  // Show command bar if value starts with /
-  const v = ta.value;
-  if(v.startsWith('/')){
-    ta.value='';
-    openCmdBar(v.slice(1));
-  }
 }
 function autoResize(ta){
   ta.style.height='auto';
@@ -938,7 +1050,7 @@ function openCmdBar(initial){
   const inp=document.getElementById('cmd-input');
   bar.classList.add('visible');
   inp.value=initial;
-  inp.focus();
+  requestAnimationFrame(() => inp.focus());
   updateSuggestions(initial);
 }
 
@@ -1104,6 +1216,13 @@ function addSysMsg(icon, text){
   div.innerHTML=`<span class="sys-icon">${icon}</span><span>${esc(text)}</span>`;
   ci.appendChild(div); scrollBot();
 }
+function addMarkdownMsg(markdown){
+  const ci=document.getElementById('chat-inner');
+  const div=document.createElement('div');
+  div.className='msg msg-assistant';
+  div.innerHTML=`<div class="msg-lbl">System</div><div class="ai-bub">${mdToHtml(markdown)}</div>`;
+  ci.appendChild(div); scrollBot();
+}
 function addLoopMsg(text){
   const ci=document.getElementById('chat-inner');
   const div=document.createElement('div');
@@ -1113,7 +1232,6 @@ function addLoopMsg(text){
 }
 
 function replayHistory(messages){
-  // Rebuild chat from saved session
   hideEmpty();
   const ci=document.getElementById('chat-inner');
   for(const m of messages){
@@ -1123,15 +1241,34 @@ function replayHistory(messages){
       div.innerHTML=`<div class="msg-lbl msg-lbl-r">You</div>
         <div class="user-bub">${esc(m.content||'')}</div>`;
       ci.appendChild(div);
-    } else if(m.role==='assistant' && m.content){
+    } else if(m.role==='assistant'){
       const div=document.createElement('div');
       div.className='msg msg-assistant';
-      const bub=document.createElement('div');
-      bub.className='ai-bub';
-      bub.innerHTML=mdToHtml(m.content);
-      div.innerHTML='<div class="msg-lbl">Nexus Agent</div>';
-      div.appendChild(bub);
-      ci.appendChild(div);
+      if(m.content){
+        const bub=document.createElement('div');
+        bub.className='ai-bub';
+        bub.innerHTML=mdToHtml(m.content);
+        div.innerHTML='<div class="msg-lbl">Nexus Agent</div>';
+        div.appendChild(bub);
+      }
+      if(m.tool_calls){
+        for(const tc of m.tool_calls){
+          const args=typeof tc.function.arguments==='string'?tc.function.arguments:JSON.stringify(tc.function.arguments);
+          const card=document.createElement('div');
+          card.className='tool-card tc-ok k-read';
+          card.innerHTML=`<div class="tc-head">
+            <div class="tc-icon">🔧</div>
+            <div class="tc-name">${esc(tc.function.name)}</div>
+            <div class="tc-stat tc-ok">✓ done</div>
+          </div>`;
+          div.appendChild(card);
+        }
+      }
+      if(m.content||m.tool_calls) ci.appendChild(div);
+    } else if(m.role==='tool'){
+      addSysMsg('⚙️',`[Tool: ${esc(m.name||'')}]\n${esc((m.content||'').slice(0,500))}`);
+    } else if(m.role==='system' && m.content){
+      addSysMsg('ℹ️',esc(m.content));
     }
   }
   scrollBot();
@@ -1237,9 +1374,9 @@ function renderSessionsSidebar(sessions){
   el.innerHTML=html;
 }
 function loadSession(id){
-  if(!confirm(`Resume session ${id.slice(0,12)}…? Current conversation will be cleared.`)) return;
-  newChat(false);
-  send({type:'load_session', session_id:id});
+  showGenericConfirm(`Resume session ${id.slice(0,12)}…? Current conversation will be cleared.`, ok=>{
+    if(ok){ newChat(false); send({type:'load_session', session_id:id}); }
+  });
 }
 
 function renderMcpSidebar(servers){
@@ -1302,6 +1439,8 @@ function removeHook(name){ if(confirm(`Remove hook "${name}"?`)) send({type:'rem
 // ═══════════════════════════════════════════════════════
 // CONFIRM
 // ═══════════════════════════════════════════════════════
+let _confirmCallback=null;
+
 function showConfirm(msg){
   document.getElementById('conf-desc').textContent=msg.description||'';
   const cmd=document.getElementById('conf-cmd');
@@ -1312,7 +1451,19 @@ function showConfirm(msg){
 }
 function confirmAns(ok){
   document.getElementById('confirm-overlay').classList.remove('visible');
-  send({type:'confirm', approved:ok});
+  if(_confirmCallback){
+    const cb=_confirmCallback; _confirmCallback=null;
+    cb(ok);
+  } else {
+    send({type:'confirm', approved:ok});
+  }
+}
+function showGenericConfirm(desc, callback){
+  _confirmCallback=callback;
+  document.getElementById('conf-desc').textContent=desc;
+  document.getElementById('conf-cmd').style.display='none';
+  document.getElementById('conf-diff').style.display='none';
+  document.getElementById('confirm-overlay').classList.add('visible');
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1358,19 +1509,25 @@ function toggleSidebar(){ document.getElementById('sidebar').classList.toggle('c
 // ═══════════════════════════════════════════════════════
 // NEW CHAT
 // ═══════════════════════════════════════════════════════
+function _emptyStateHTML(){
+  return `<div class="empty" id="empty-state">
+    <div class="empty-mark">N</div>
+    <div class="empty-title">What can I help you build?</div>
+    <div class="empty-sub">Full access to filesystem, shell, web, and a powerful tool suite. Type <code style="background:var(--bg3);padding:1px 5px;border-radius:3px;color:var(--acc-l);font-family:var(--f-mono)">/</code> for commands.</div>
+    <div class="chips">
+      <div class="chip" onclick="quickSend('List all files in the current directory')">📁 List files</div>
+      <div class="chip" onclick="quickSend('Show system info and running processes')">📊 System info</div>
+      <div class="chip" onclick="quickSend('Search the web for the latest AI news')">🌐 Web search</div>
+      <div class="chip" onclick="quickSend('Build a SaaS task manager with Next.js and FastAPI')">🏗️ Build SaaS</div>
+      <div class="chip" onclick="quickSend('Run an OWASP security audit on https://example.com')">🛡️ Security audit</div>
+      <div class="chip" onclick="quickSend('Create a PDF report about machine learning in 2025')">📄 Create PDF</div>
+      <div class="chip" onclick="quickSend('Monitor the system for suspicious processes')">🔒 OS security</div>
+      <div class="chip" onclick="showCmd()">⌘ Show commands</div>
+    </div>
+  </div>`;
+}
 function newChat(clearServer=true){
-  document.getElementById('chat-inner').innerHTML=`
-    <div class="empty" id="empty-state">
-      <div class="empty-mark">N</div>
-      <div class="empty-title">What can I help you build?</div>
-      <div class="empty-sub">Full access to filesystem, shell, web, and a powerful tool suite. Type <code style="background:var(--bg3);padding:1px 5px;border-radius:3px;color:var(--acc-l);font-family:var(--f-mono)">/</code> for commands.</div>
-      <div class="chips">
-        <div class="chip" onclick="quickSend('List all files in the current directory')">📁 List files</div>
-        <div class="chip" onclick="quickSend('Search the web for the latest AI news')">🌐 Web search</div>
-        <div class="chip" onclick="quickSend('Build a SaaS with Next.js and FastAPI')">🏗️ Build SaaS</div>
-        <div class="chip" onclick="showCmd()">⌘ Commands</div>
-      </div>
-    </div>`;
+  document.getElementById('chat-inner').innerHTML=_emptyStateHTML();
   toolCards={}; curBubble=null; curText=''; endRun();
   if(clearServer) send({type:'clear_context'});
 }
@@ -1440,7 +1597,7 @@ function shortPath(p){ if(!p) return '—';
   return parts.length<=2?p:'…/'+parts.slice(-2).join('/'); }
 function shortModel(m){ return m?(m.split('/').pop().slice(0,24)):'—'; }
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
-  .replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
 // ═══════════════════════════════════════════════════════
 // MARKDOWN
@@ -1475,6 +1632,87 @@ function mdToHtml(text){
 }
 
 // ═══════════════════════════════════════════════════════
+// FILE DOWNLOAD CARDS
+// ═══════════════════════════════════════════════════════
+let _fpCurrentPath = null;
+
+function addFileCards(files) {
+  if (!files || !files.length) return;
+  const ci = document.getElementById('chat-inner');
+  const bar = document.createElement('div');
+  bar.className = 'files-bar';
+
+  const lbl = document.createElement('div');
+  lbl.className = 'files-bar-lbl';
+  lbl.textContent = files.length === 1 ? '1 file created' : `${files.length} files created`;
+  bar.appendChild(lbl);
+
+  for (const f of files) {
+    const isNew = f.is_new !== false;
+    const card = document.createElement('div');
+    card.className = `file-card ${isNew ? 'fc-new' : 'fc-edit'}`;
+    card.title = 'Click to preview';
+
+    const ext = f.name.split('.').pop().toLowerCase();
+    const icon = {
+      py:'🐍', js:'📜', ts:'📜', jsx:'📜', tsx:'📜',
+      html:'🌐', css:'🎨', json:'📋', md:'📝',
+      txt:'📄', sh:'⚡', sql:'🗄️', yml:'⚙️', yaml:'⚙️',
+      toml:'⚙️', rs:'🦀', go:'🐹', java:'☕', cpp:'⚙️',
+      c:'⚙️', pdf:'📕', csv:'📊', xml:'📋',
+    }[ext] || '📄';
+
+    card.innerHTML = `
+      <div class="file-card-icon">${icon}</div>
+      <div class="file-card-info">
+        <div class="file-card-name">${esc(f.name)}</div>
+        <div class="file-card-path">${esc(f.path)}</div>
+      </div>
+      <span class="file-card-badge">${isNew ? 'new' : 'edited'}</span>
+      <div class="file-card-dl" title="Download" onclick="event.stopPropagation();dlFile('${esc(f.path)}')">⬇</div>`;
+
+    card.addEventListener('click', () => openFilePreview(f.path, f.name));
+    bar.appendChild(card);
+  }
+
+  ci.appendChild(bar);
+  scrollBot();
+}
+
+async function openFilePreview(path, name) {
+  _fpCurrentPath = path;
+  document.getElementById('fp-title').textContent = name || path;
+  document.getElementById('fp-content').innerHTML = '<span class="fp-loading">Loading…</span>';
+  document.getElementById('file-preview-overlay').classList.add('visible');
+
+  try {
+    const url = `${getHttpBase()}/files?path=${encodeURIComponent(path)}&token=${encodeURIComponent(getTok())}`;
+    const meta = await (await fetch(url)).json();
+
+    // fetch raw file via download endpoint with text mode
+    const dlUrl = `${getHttpBase()}/download?path=${encodeURIComponent(path)}&token=${encodeURIComponent(getTok())}`;
+    const resp = await fetch(dlUrl);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+    const text = await resp.text();
+    document.getElementById('fp-content').textContent = text;
+  } catch (e) {
+    document.getElementById('fp-content').textContent = `Could not load file: ${e}`;
+  }
+}
+
+function closeFP(e) {
+  if (!e || e.target === document.getElementById('file-preview-overlay')) {
+    document.getElementById('file-preview-overlay').classList.remove('visible');
+    _fpCurrentPath = null;
+  }
+}
+
+function fpDownload() {
+  if (_fpCurrentPath) dlFile(_fpCurrentPath);
+}
+
+// ═══════════════════════════════════════════════════════
 // BOOT
 // ═══════════════════════════════════════════════════════
 // ▼ ONLY CHANGE THIS LINE after deploying to Render ▼
@@ -1482,6 +1720,7 @@ const DEPLOYED_BACKEND = 'wss://agenticsystem-3.onrender.com/ws';
 // ▲ THAT'S IT ▲
 
 (function(){
+  document.getElementById('chat-inner').innerHTML=_emptyStateHTML();
   const p=new URLSearchParams(window.location.search);
   const fromUrl=p.get('ws'), fromTok=p.get('token');
   if(fromTok){ const el=document.getElementById('ws-tok-inp'); if(el) el.value=fromTok; }
