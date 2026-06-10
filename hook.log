@@ -13,3 +13,5 @@
 [HOOK] {"timestamp": "2026-06-10T03:46:09.416369", "trigger": "before_agent", "cwd": "/home/darklord/Documents/Agentic-AI-/nexus_agent", "tool_name": null, "user_message": "hi", "error": null}
 [HOOK] {"timestamp": "2026-06-10T18:11:45.392442", "trigger": "before_agent", "cwd": "/home/darklord/Documents/Agentic-AI-/nexus_agent", "tool_name": null, "user_message": "create a basic python file called hello1023.py", "error": null}
 [HOOK] {"timestamp": "2026-06-10T18:12:01.039421", "trigger": "before_tool", "cwd": "/home/darklord/Documents/Agentic-AI-/nexus_agent", "tool_name": "write_file", "user_message": null, "error": null}
+[HOOK] {"timestamp": "2026-06-10T18:23:16.584638", "trigger": "before_agent", "cwd": "/home/darklord/Documents/Agentic-AI-/nexus_agent", "tool_name": null, "user_message": "why is the mcp server not connected even though it is the config.toml", "error": null}
+[HOOK] {"timestamp": "2026-06-10T18:32:51.091698", "trigger": "before_agent", "cwd": "/home/darklord/Documents/Agentic-AI-/nexus_agent", "tool_name": null, "user_message": "hi", "error": null}

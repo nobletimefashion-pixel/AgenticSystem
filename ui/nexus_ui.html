@@ -395,6 +395,19 @@ input,textarea{font-family:inherit;color:inherit}
   border-radius:3px;padding:1px 5px;font-family:var(--font-mono);font-size:10px;
 }
 
+/* ── DRAG-DROP ───────────────────────────────────────────────────────── */
+.input-box.drop-active{border-color:var(--acc);box-shadow:0 0 0 2px rgba(34,211,238,.25),var(--glow);background:var(--bg3)}
+.drop-overlay{display:none;position:absolute;inset:0;border-radius:var(--rad);border:2px dashed var(--acc);
+  align-items:center;justify-content:center;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);
+  font-size:14px;color:var(--acc);font-weight:600;pointer-events:none;z-index:2}
+.drop-overlay.visible{display:flex}
+.input-box{position:relative}
+.attached-files{max-width:820px;margin:0 auto 6px;display:flex;flex-wrap:wrap;gap:6px}
+.attached-file{padding:4px 10px;border-radius:99px;background:var(--bg3);border:1px solid var(--bg4);
+  font-size:11px;color:var(--tx1);display:flex;align-items:center;gap:6px;font-family:var(--font-mono);animation:slideUp .15s ease}
+.attached-file .remove-attach{cursor:pointer;color:var(--tx2);transition:color .1s;font-size:14px;line-height:1}
+.attached-file .remove-attach:hover{color:var(--red)}
+
 /* ── SETTINGS PANEL ──────────────────────────────────────────────────────── */
 #settings-overlay{
   display:none;position:fixed;inset:0;z-index:99;
@@ -556,7 +569,9 @@ input,textarea{font-family:inherit;color:inherit}
 
     <!-- INPUT -->
     <div id="input-area">
-      <div class="input-box">
+      <div id="attached-files" class="attached-files"></div>
+      <div class="input-box" id="input-box">
+        <div class="drop-overlay" id="drop-overlay">Drop files to attach</div>
         <textarea id="msg-input" rows="1" placeholder="Message Nexus Agent…" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
         <button class="send-btn" id="send-btn" onclick="sendMessage()" title="Send (Enter)">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
@@ -565,6 +580,7 @@ input,textarea{font-family:inherit;color:inherit}
       <div class="input-hint">
         <span><kbd class="kbd">Enter</kbd> to send</span>
         <span><kbd class="kbd">Shift+Enter</kbd> for new line</span>
+        <span>Drop files to attach</span>
       </div>
     </div>
   </div><!-- /#main -->
@@ -635,6 +651,7 @@ let running = false;
 let curAssistantBubble = null;
 let curAssistantText   = '';
 let toolCards          = {};   // call_id → {card, headerEl, outputEl, diffEl, bodyEl}
+let attachedFiles = []; // {name, content} for drag-dropped files
 
 // ── WEBSOCKET ─────────────────────────────────────────────────────────────
 function connect(url) {
@@ -731,14 +748,22 @@ function handleMsg(msg) {
 // ── SEND MESSAGE ──────────────────────────────────────────────────────────
 function sendMessage() {
   const input = document.getElementById('msg-input');
-  const text  = input.value.trim();
-  if (!text || running) return;
+  let text = input.value.trim();
+  if (!text && !attachedFiles.length) return;
+  if (attachedFiles.length) {
+    const fileBlocks = attachedFiles.map(f =>
+      `File: ${f.name}\n\`\`\`\n${f.content}\n\`\`\``
+    ).join('\n\n');
+    text = text ? `${fileBlocks}\n\n${text}` : fileBlocks;
+  }
   input.value = '';
   autoResize(input);
   addUserMsg(text);
   hideEmpty();
   startRunning();
   toolCards = {};
+  attachedFiles = [];
+  document.getElementById('attached-files').innerHTML = '';
   send({ type: 'chat', content: text });
 }
 
@@ -754,6 +779,102 @@ function handleKey(e) {
 function autoResize(ta) {
   ta.style.height = 'auto';
   ta.style.height = Math.min(ta.scrollHeight, 200) + 'px';
+}
+
+// ── DRAG-DROP ─────────────────────────────────────────────────────────────
+const TEXT_EXT = new Set(['.txt','.md','.json','.xml','.yaml','.yml','.toml','.csv',
+  '.py','.js','.ts','.jsx','.tsx','.html','.css','.scss','.less',
+  '.sh','.bash','.zsh','.sql','.rs','.go','.java','.cpp','.c','.h','.hpp',
+  '.rb','.php','.swift','.kt','.scala','.pl','.lua','.r','.m','.mm',
+  '.vue','.svelte','.astro','.graphql','.proto','.tex','.cfg','.conf',
+  '.ini','.env','.gitignore','.dockerfile','.makefile','.gradle','.sbt']);
+
+function isTextFile(name) {
+  const ext = '.' + name.split('.').pop().toLowerCase();
+  return TEXT_EXT.has(ext);
+}
+
+function renderAttachedFiles() {
+  const el = document.getElementById('attached-files');
+  el.innerHTML = attachedFiles.map((f, i) =>
+    `<span class="attached-file">
+      <span>${escHtml(f.name)}</span>
+      <span class="remove-attach" onclick="removeAttach(${i})">&times;</span>
+    </span>`
+  ).join('');
+}
+
+function removeAttach(idx) {
+  attachedFiles.splice(idx, 1);
+  renderAttachedFiles();
+}
+
+function handleFiles(files) {
+  for (const file of files) {
+    if (attachedFiles.find(f => f.name === file.name)) continue;
+    if (!isTextFile(file.name)) {
+      addSysMsg('⚠️', `Cannot attach ${file.name} — only text files supported.`);
+      continue;
+    }
+    const reader = new FileReader();
+    reader.onload = e => {
+      attachedFiles.push({ name: file.name, content: e.target.result });
+      renderAttachedFiles();
+    };
+    reader.onerror = () => {
+      addSysMsg('⚠️', `Failed to read ${file.name}`);
+    };
+    reader.readAsText(file);
+  }
+}
+
+(function initDragDrop() {
+  const box = document.getElementById('input-box');
+  const overlay = document.getElementById('drop-overlay');
+  let dragCounter = 0;
+
+  box.addEventListener('dragenter', e => {
+    e.preventDefault();
+    dragCounter++;
+    box.classList.add('drop-active');
+    overlay.classList.add('visible');
+  });
+
+  box.addEventListener('dragover', e => {
+    e.preventDefault();
+  });
+
+  box.addEventListener('dragleave', e => {
+    e.preventDefault();
+    dragCounter--;
+    if (dragCounter === 0) {
+      box.classList.remove('drop-active');
+      overlay.classList.remove('visible');
+    }
+  });
+
+  box.addEventListener('drop', e => {
+    e.preventDefault();
+    dragCounter = 0;
+    box.classList.remove('drop-active');
+    overlay.classList.remove('visible');
+    if (e.dataTransfer.files.length) {
+      handleFiles(e.dataTransfer.files);
+    }
+  });
+
+  document.addEventListener('dragover', e => e.preventDefault());
+  document.addEventListener('drop', e => e.preventDefault());
+})();
+
+function addSysMsg(icon, text) {
+  const ci = document.getElementById('chat-inner');
+  const div = document.createElement('div');
+  div.className = 'msg msg-assistant';
+  div.innerHTML = `<div class="msg-role">System</div>
+    <div class="bubble" style="border-color:var(--bg3);color:var(--tx1);font-size:13px">${icon} ${escHtml(text)}</div>`;
+  ci.appendChild(div);
+  scrollBottom();
 }
 
 // ── INTERRUPT ─────────────────────────────────────────────────────────────

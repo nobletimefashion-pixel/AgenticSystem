@@ -385,6 +385,19 @@ a{color:var(--acc-l);text-decoration:none}
 .kbd{background:var(--bg3);border:1px solid var(--bg5);border-radius:3px;
   padding:1px 4px;font-family:var(--f-mono);font-size:9.5px}
 
+/* ── DRAG-DROP ───────────────────────────────────────────────────────── */
+.input-box.drop-active{border-color:var(--acc);box-shadow:0 0 0 2px rgba(34,211,238,.25),var(--glow);background:var(--bg3)}
+.drop-overlay{display:none;position:absolute;inset:0;border-radius:var(--r-lg);border:2px dashed var(--acc);
+  align-items:center;justify-content:center;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);
+  font-size:13px;color:var(--acc);font-weight:600;pointer-events:none;z-index:2}
+.drop-overlay.visible{display:flex}
+.input-box{position:relative}
+.attached-files{max-width:780px;margin:0 auto 6px;display:flex;flex-wrap:wrap;gap:6px}
+.attached-file{padding:4px 10px;border-radius:99px;background:var(--bg3);border:1px solid var(--bg5);
+  font-size:11px;color:var(--tx1);display:flex;align-items:center;gap:6px;font-family:var(--f-mono);animation:slideUp .15s ease}
+.attached-file .remove-attach{cursor:pointer;color:var(--tx2);transition:color .1s;font-size:13px;line-height:1}
+.attached-file .remove-attach:hover{color:var(--red)}
+
 /* ── CONFIRM ─────────────────────────────────────────────────────────── */
 #confirm-overlay{display:none;position:fixed;inset:0;z-index:300;
   background:rgba(0,0,0,.72);backdrop-filter:blur(6px);
@@ -695,7 +708,9 @@ a{color:var(--acc-l);text-decoration:none}
   </div>
 
   <div id="input-wrap">
-    <div class="input-box">
+    <div id="attached-files" class="attached-files"></div>
+    <div class="input-box" id="input-box">
+      <div class="drop-overlay" id="drop-overlay">Drop files to attach</div>
       <textarea id="msg-input" rows="1"
         placeholder="Message Nexus Agent…  (type / for commands)"
         onkeydown="handleKey(event)"
@@ -707,7 +722,7 @@ a{color:var(--acc-l);text-decoration:none}
     <div class="input-hint">
       <span><kbd class="kbd">Enter</kbd> send</span>
       <span><kbd class="kbd">Shift+Enter</kbd> newline</span>
-      <span><kbd class="kbd">/</kbd> commands</span>
+      <span>Drop files to attach</span>
     </div>
   </div>
 </div><!-- /#main -->
@@ -810,6 +825,7 @@ let curBubble  = null;
 let curText    = '';
 let toolCards  = {};
 let cmdFocused = 0;   // focused index in suggestion list
+let attachedFiles = []; // {name, content} for drag-dropped files
 
 // ═══════════════════════════════════════════════════════
 // COMMANDS TABLE  (matches /commands in the terminal)
@@ -1014,12 +1030,20 @@ ${Object.entries(d).map(([k,v])=>'- **' + esc(k) + ':** `' + esc(JSON.stringify(
 // ═══════════════════════════════════════════════════════
 function sendMessage(){
   const inp=document.getElementById('msg-input');
-  const text=inp.value.trim();
-  if(!text||running) return;
+  let text=inp.value.trim();
+  if(!text&&!attachedFiles.length) return;
+  if(attachedFiles.length){
+    const fileBlocks = attachedFiles.map(f =>
+      `File: ${f.name}\n\`\`\`\n${f.content}\n\`\`\``
+    ).join('\n\n');
+    text = text ? `${fileBlocks}\n\n${text}` : fileBlocks;
+  }
   inp.value=''; autoResize(inp);
   addUserMsg(text);
   hideEmpty();
   toolCards={};
+  attachedFiles=[];
+  document.getElementById('attached-files').innerHTML='';
   startRun();
   send({type:'chat', content:text});
 }
@@ -1039,6 +1063,95 @@ function autoResize(ta){
   ta.style.height='auto';
   ta.style.height=Math.min(ta.scrollHeight,160)+'px';
 }
+
+// ═══════════════════════════════════════════════════════
+// DRAG-DROP
+// ═══════════════════════════════════════════════════════
+const TEXT_EXT = new Set(['.txt','.md','.json','.xml','.yaml','.yml','.toml','.csv',
+  '.py','.js','.ts','.jsx','.tsx','.html','.css','.scss','.less',
+  '.sh','.bash','.zsh','.sql','.rs','.go','.java','.cpp','.c','.h','.hpp',
+  '.rb','.php','.swift','.kt','.scala','.pl','.lua','.r','.m','.mm',
+  '.vue','.svelte','.astro','.graphql','.proto','.tex','.cfg','.conf',
+  '.ini','.env','.gitignore','.dockerfile','.makefile','.gradle','.sbt']);
+
+function isTextFile(name) {
+  const ext = '.' + name.split('.').pop().toLowerCase();
+  return TEXT_EXT.has(ext);
+}
+
+function renderAttachedFiles() {
+  const el = document.getElementById('attached-files');
+  el.innerHTML = attachedFiles.map((f, i) =>
+    `<span class="attached-file">
+      <span>${esc(f.name)}</span>
+      <span class="remove-attach" onclick="removeAttach(${i})">&times;</span>
+    </span>`
+  ).join('');
+}
+
+function removeAttach(idx) {
+  attachedFiles.splice(idx, 1);
+  renderAttachedFiles();
+}
+
+function handleFiles(files) {
+  for (const file of files) {
+    if (attachedFiles.find(f => f.name === file.name)) continue;
+    if (!isTextFile(file.name)) {
+      addSysMsg('⚠️', `Cannot attach ${file.name} — only text files are supported.`);
+      continue;
+    }
+    const reader = new FileReader();
+    reader.onload = e => {
+      attachedFiles.push({ name: file.name, content: e.target.result });
+      renderAttachedFiles();
+    };
+    reader.onerror = () => {
+      addSysMsg('⚠️', `Failed to read ${file.name}`);
+    };
+    reader.readAsText(file);
+  }
+}
+
+(function initDragDrop() {
+  const box = document.getElementById('input-box');
+  const overlay = document.getElementById('drop-overlay');
+  let dragCounter = 0;
+
+  box.addEventListener('dragenter', e => {
+    e.preventDefault();
+    dragCounter++;
+    box.classList.add('drop-active');
+    overlay.classList.add('visible');
+  });
+
+  box.addEventListener('dragover', e => {
+    e.preventDefault();
+  });
+
+  box.addEventListener('dragleave', e => {
+    e.preventDefault();
+    dragCounter--;
+    if (dragCounter === 0) {
+      box.classList.remove('drop-active');
+      overlay.classList.remove('visible');
+    }
+  });
+
+  box.addEventListener('drop', e => {
+    e.preventDefault();
+    dragCounter = 0;
+    box.classList.remove('drop-active');
+    overlay.classList.remove('visible');
+    if (e.dataTransfer.files.length) {
+      handleFiles(e.dataTransfer.files);
+    }
+  });
+
+  // Allow dropping on the whole page to prevent browser default
+  document.addEventListener('dragover', e => e.preventDefault());
+  document.addEventListener('drop', e => e.preventDefault());
+})();
 
 // ═══════════════════════════════════════════════════════
 // COMMAND BAR

@@ -349,6 +349,7 @@ async def websocket_endpoint(ws: WebSocket):
                 if agent_task and not agent_task.done():
                     agent_task.cancel()
                 agent = await _ensure_agent()
+                await conn.send_system_info(agent)
                 agent_task = asyncio.create_task(conn.run_message(content, agent))
 
             # ── confirm ───────────────────────────────────────────────────────
