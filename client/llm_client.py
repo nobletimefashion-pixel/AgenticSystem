@@ -43,49 +43,60 @@ class LLMClient:
     async def chat_completion(self, messages: list[dict[str, Any]],tools: list[dict[str, Any]] | None=None,stream: bool = True) -> AsyncGenerator:
         
         client = self.get_client()
-        kwargs = {
-            "model": self.config.model_name,
-            "messages": messages,
-            "stream": stream,
-                }
-        if tools:
-            kwargs['tools'] = self._built_tools(tools)
-            kwargs['tool_choice'] = "auto" #we can force any particaular tool or make it auto
-        for attempt in range(self._max_retries + 1):
-            try:
-                if stream:
-                    async for event in self._stream_response(client, kwargs):
+        models_to_try = [self.config.model_name] + self.config.fallback_models
+        
+        for model_index, model in enumerate(models_to_try):
+            kwargs = {
+                "model": model,
+                "messages": messages,
+                "stream": stream,
+            }
+            if tools:
+                kwargs['tools'] = self._built_tools(tools)
+                kwargs['tool_choice'] = "auto"
+            for attempt in range(self._max_retries + 1):
+                try:
+                    if stream:
+                        async for event in self._stream_response(client, kwargs):
+                            yield event
+                    else:
+                        event = await self._non_stream_response(client, kwargs)
                         yield event
-                else:
-                    event = await self._non_stream_response(client, kwargs)
-                    yield event
-                return
-            except RateLimitError as e:
-                if attempt < self._max_retries:
-                    wait_time = 2**attempt#exponential backoff
-                    await asyncio.sleep(wait_time)
-                else:
+                    return
+                except RateLimitError as e:
+                    if attempt < self._max_retries:
+                        wait_time = 2**attempt
+                        await asyncio.sleep(wait_time)
+                    else:
+                        yield StreamEvent(
+                            type=StreamEventType.ERROR,
+                            error=f"The Ratelimit exceeded: {e}",
+                        )
+                        return
+                except APIConnectionError as e:
+                    if attempt < self._max_retries:
+                        wait_time = 2**attempt
+                        await asyncio.sleep(wait_time)
+                    else:
+                        yield StreamEvent(
+                            type=StreamEventType.ERROR,
+                            error=f"Connection Error: {e}",
+                        )
+                        return
+                except APIError as e:
+                    if model_index < len(models_to_try) - 1 and attempt >= self._max_retries:
+                        yield StreamEvent(
+                            type=StreamEventType.TEXT_DELTA,
+                            text_delta=TextDelta(
+                                content=f"\n[Model '{model}' failed, trying fallback '{models_to_try[model_index + 1]}'...]\n"
+                            ),
+                        )
+                        break
                     yield StreamEvent(
                         type=StreamEventType.ERROR,
-                        error=f"The Ratelimit exceeded: {e}",
+                        error=f"Api error: {e}",
                     )
                     return
-            except APIConnectionError as e:
-                if attempt < self._max_retries:
-                    wait_time = 2**attempt#exponential backoff
-                    await asyncio.sleep(wait_time)
-                else:
-                    yield StreamEvent(
-                        type=StreamEventType.ERROR,
-                        error=f"Connection Error: {e}",
-                    )
-                    return
-            except APIError as e:
-                yield StreamEvent(
-                    type=StreamEventType.ERROR,
-                    error=f"Api error: {e}",
-                    )
-                return
             
             
 

@@ -1,3 +1,4 @@
+import asyncio
 from sys import path
 from pydantic import BaseModel, Field
 
@@ -50,9 +51,9 @@ class ReadFileTool(Tool):
             )
         try:
             try:
-               content = file_path.read_text(encoding='utf-8')
+               content = await asyncio.to_thread(file_path.read_text, encoding='utf-8')
             except UnicodeDecodeError:
-               content = file_path.read_text(encoding='latin-1')
+               content = await asyncio.to_thread(file_path.read_text, encoding='latin-1')
             lines = content.splitlines()#this will split the content of the file into lines and return a list of lines. This is useful for reading large files as we can read the file line by line instead of reading the entire file at once which can cause memory issues for large files.
             total_lines = len(lines)
             if total_lines == 0:

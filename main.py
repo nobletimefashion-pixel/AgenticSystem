@@ -305,13 +305,13 @@ class CLI:
                 messages=self.agent.session.context_manager.get_messages(),
                 total_usage=self.agent.session.context_manager.total_usage,
             )
-            persistence_manager.save_session(session_snapshot)
+            await persistence_manager.save_session(session_snapshot)
             console.print(
                 f"[success]Session saved: {self.agent.session.session_id}[/success]"
             )
         elif cmd_name == "/sessions":
             persistence_manager = PersistenceManager()
-            sessions = persistence_manager.list_sessions()
+            sessions = await persistence_manager.list_sessions()
             console.print("\n[bold]Saved Sessions[/bold]")
             for s in sessions:
                 console.print(
@@ -322,7 +322,7 @@ class CLI:
                 console.print(f"[error]Usage: /resume <session_id> [/error]")
             else:
                 persistence_manager = PersistenceManager()
-                snapshot = persistence_manager.load_session(cmd_args)
+                snapshot = await persistence_manager.load_session(cmd_args)
                 if not snapshot:
                     console.print(f"[error]Session does not exist [/error]")
                 else:
@@ -352,14 +352,14 @@ class CLI:
                 messages=self.agent.session.context_manager.get_messages(),
                 total_usage=self.agent.session.context_manager.total_usage,
             )
-            checkpoint_id = persistence_manager.save_checkpoint(session_snapshot)
+            checkpoint_id = await persistence_manager.save_checkpoint(session_snapshot)
             console.print(f"[success]Checkpoint created: {checkpoint_id}[/success]")
         elif cmd_name == "/restore":
             if not cmd_args:
                 console.print(f"[error]Usage: /restore <checkpoint_id> [/error]")
             else:
                 persistence_manager = PersistenceManager()
-                snapshot = persistence_manager.load_checkpoint(cmd_args)
+                snapshot = await persistence_manager.load_checkpoint(cmd_args)
                 if not snapshot:
                     console.print(f"[error]Checkpoint does not exist [/error]")
                 else:
@@ -377,7 +377,7 @@ class CLI:
 
                     self.agent.session = session
                     console.print(
-                        f"[success]Resumed session: {session.session_id}, checkpoint: {checkpoint_id}[/success]"
+                        f"[success]Resumed session: {session.session_id}, checkpoint: {cmd_args}[/success]"
                     )
         else:
             console.print(f"[error]Unknown command: {cmd_name}[/error]")

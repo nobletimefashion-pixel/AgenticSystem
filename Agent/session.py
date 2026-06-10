@@ -19,7 +19,7 @@ class Session:
     def __init__(self, config:Config):
         self.config = config
         self.client = LLMClient(config=config)
-        self.tool_registry = create_default_registry(config)
+        self.tool_registry = create_default_registry(config, llm_client=self.client)
         self.discover_manager = ToolDiscoveryManager(self.config,self.tool_registry)
         self.context_manager : ContextManager | None = None
         self.mcp_manager = MCPManager(self.config)

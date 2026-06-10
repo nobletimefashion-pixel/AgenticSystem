@@ -53,7 +53,6 @@ class ContextManager:
         item = MessageItem(
             role='user',
             content=content,
-            token_count=count_token(content,self._model_name)
         )
         
         self._messages.append(item)
@@ -62,7 +61,6 @@ class ContextManager:
         item = MessageItem(
             role='assistant',
             content=content or "",
-            token_count=count_token(content or "",self._model_name),
             tool_calls=tool_calls or []
         )
         
@@ -73,7 +71,6 @@ class ContextManager:
             role='tool',
             content=content,
             tool_call_id=tool_call_id,
-            token_count=count_token(content, self._model_name)
         )
         self._messages.append(item)
     
@@ -123,7 +120,6 @@ class ContextManager:
         summary_item = MessageItem(
             role="user",
             content=continuation_content,
-            token_count=count_token(continuation_content, self._model_name),
         )
         self._messages.append(summary_item)
 
@@ -137,7 +133,6 @@ class ContextManager:
         ack_item = MessageItem(
             role="assistant",
             content=ack_content,
-            token_count=count_token(ack_content, self._model_name),
         )
         self._messages.append(ack_item)
 
@@ -149,7 +144,6 @@ class ContextManager:
         continue_item = MessageItem(
             role="user",
             content=continue_content,
-            token_count=count_token(continue_content, self._model_name),
         )
         self._messages.append(continue_item)
     

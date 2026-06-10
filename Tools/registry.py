@@ -6,7 +6,7 @@ from Tools.base import Tool, ToolInvokation, ToolResult
 from Tools.builtin import ReadFileTool, get_all_builtin_tools
 from Tools.subagents import SubAgentTool, get_default_subagents_definitions
 from config.config import Config
-from Tools.builtin.rag import RAGTool 
+from Tools.builtin.rag import RAGTool
 from client.llm_client import LLMClient
 from hooks.hook_system import HookSystem
 from safety.approval import ApprovalContext, ApprovalDecision, ApprovalManager
@@ -117,12 +117,13 @@ class ToolRegistry:
 
 
 
-def create_default_registry(config:Config) -> ToolRegistry:
+def create_default_registry(config: Config, llm_client: LLMClient | None = None) -> ToolRegistry:
     registry = ToolRegistry(config)
-    llm_client = LLMClient(config)
+    if llm_client is None:
+        llm_client = LLMClient(config)
     for tool_class in get_all_builtin_tools():
         if tool_class == RAGTool:
-            registry.register(tool_class(config, llm_client))  
+            registry.register(tool_class(config, llm_client))
         else:
             registry.register(tool_class(config))
     for subagent_def in get_default_subagents_definitions():

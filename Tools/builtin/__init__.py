@@ -10,7 +10,7 @@ from Tools.builtin.todo import TodosTool
 from Tools.builtin.web_fetch import WebFetchTool
 from Tools.builtin.web_search import WebSearchTool
 from Tools.builtin.write_file import WriteFileTool
-from Tools.builtin.browerser import BrowserTool
+from Tools.builtin.browser import BrowserTool
 from Tools.builtin.domain_osint import DomainOSINTTool
 from Tools.builtin.email_osint import EmailOSINTTool
 from Tools.builtin.git import GitTool

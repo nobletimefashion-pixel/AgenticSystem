@@ -82,7 +82,7 @@ class MemoryTool(Tool):
             for key,value in sorted(entries.items()):
                 lines.append(f" {key}: {value}")
             
-            return ToolResult.error_result("\n".join(lines),metadata={'found':True,})
+            return ToolResult.success_result("\n".join(lines),metadata={'found':True,})
         elif params.action.lower() == 'clear':
             memory = self._load_memory()
             count = len(memory.get('entries', {}))

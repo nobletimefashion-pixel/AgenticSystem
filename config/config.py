@@ -9,6 +9,10 @@ class ModelConfig(BaseModel):
     name: str = "nvidia/nemotron-3-super-120b-a12b:free"
     temperature: float = Field(default=1.0,ge=0.0,le=2.0)
     context_window: int = 256_000
+    fallback_models: list[str] = Field(
+        default_factory=lambda: ["openai/gpt-oss-120b:free", "nvidia/nemotron-3-super-120b-a12b:free", "claude-3-haiku-20240307"],
+        description="Ordered list of fallback models to try if the primary model fails"
+    )
 
 class ShellEnvironmentPolicy(BaseModel):
     ignore_default_excludes: bool = False #ignreing api_key etc
@@ -93,16 +97,19 @@ class Config(BaseModel):
     @property
     def model_name(self) -> str:
         return self.model.name
-    
+
     @model_name.setter
     def model_name(self, value: str) -> None:
         self.model.name = value
-        
-        
+
     @property
-    def temperature(self) ->float:
+    def fallback_models(self) -> list[str]:
+        return self.model.fallback_models
+
+    @property
+    def temperature(self) -> float:
         return self.model.temperature
-    
+
     @temperature.setter
     def temperature(self, value: str) -> None:
         self.model.temperature = value

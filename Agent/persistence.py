@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 from dataclasses import dataclass
 from datetime import datetime
 import json
@@ -49,59 +50,68 @@ class PersistenceManager:
         os.chmod(self.sessions_dir, 0o700)
         os.chmod(self.checkpoints_dir, 0o700)
 
-    def save_session(self, snapshot: SessionSnapshot) -> None:
+    async def save_session(self, snapshot: SessionSnapshot) -> None:
         file_path = self.sessions_dir / f"{snapshot.session_id}.json"
 
-        with open(file_path, "w", encoding="utf-8") as fp:
-            json.dump(snapshot.to_dict(), fp, indent=2)
+        def _save():
+            with open(file_path, "w", encoding="utf-8") as fp:
+                json.dump(snapshot.to_dict(), fp, indent=2)
+            os.chmod(file_path, 0o600)
 
-        os.chmod(file_path, 0o600)
+        await asyncio.to_thread(_save)
 
-    def load_session(self, session_id: str) -> SessionSnapshot | None:
+    async def load_session(self, session_id: str) -> SessionSnapshot | None:
         file_path = self.sessions_dir / f"{session_id}.json"
 
-        if not file_path.exists():
-            return None
-
-        with open(file_path, "r", encoding="utf-8") as fp:
-            data = json.load(fp)
-
-        return SessionSnapshot.from_dict(data)
-
-    def list_sessions(self) -> list[dict[str, Any]]:
-        sessions = []
-        for file_path in self.sessions_dir.glob("*.json"):
+        def _load():
+            if not file_path.exists():
+                return None
             with open(file_path, "r", encoding="utf-8") as fp:
                 data = json.load(fp)
-            sessions.append(
-                {
-                    "session_id": data["session_id"],
-                    "created_at": data["created_at"],
-                    "updated_at": data["updated_at"],
-                    "turn_count": data["turn_count"],
-                }
-            )
+            return SessionSnapshot.from_dict(data)
 
-        sessions.sort(key=lambda x: x["updated_at"], reverse=True)
-        return sessions
+        return await asyncio.to_thread(_load)
 
-    def save_checkpoint(self, snapshot: SessionSnapshot) -> str:
+    async def list_sessions(self) -> list[dict[str, Any]]:
+        def _list():
+            sessions = []
+            for fp in self.sessions_dir.glob("*.json"):
+                with open(fp, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                sessions.append(
+                    {
+                        "session_id": data["session_id"],
+                        "created_at": data["created_at"],
+                        "updated_at": data["updated_at"],
+                        "turn_count": data["turn_count"],
+                    }
+                )
+            sessions.sort(key=lambda x: x["updated_at"], reverse=True)
+            return sessions
+
+        return await asyncio.to_thread(_list)
+
+    async def save_checkpoint(self, snapshot: SessionSnapshot) -> str:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         checkpoint_id = f"{snapshot.session_id}_{timestamp}"
         file_path = self.checkpoints_dir / f"{checkpoint_id}.json"
 
-        with open(file_path, "w", encoding="utf-8") as fp:
-            json.dump(snapshot.to_dict(), fp, indent=2)
-        os.chmod(file_path, 0o600)
-        return checkpoint_id
+        def _save():
+            with open(file_path, "w", encoding="utf-8") as fp:
+                json.dump(snapshot.to_dict(), fp, indent=2)
+            os.chmod(file_path, 0o600)
+            return checkpoint_id
 
-    def load_checkpoint(self, checkpoint_id: str) -> SessionSnapshot | None:
+        return await asyncio.to_thread(_save)
+
+    async def load_checkpoint(self, checkpoint_id: str) -> SessionSnapshot | None:
         file_path = self.checkpoints_dir / f"{checkpoint_id}.json"
 
-        if not file_path.exists():
-            return None
+        def _load():
+            if not file_path.exists():
+                return None
+            with open(file_path, "r", encoding="utf-8") as fp:
+                data = json.load(fp)
+            return SessionSnapshot.from_dict(data)
 
-        with open(file_path, "r", encoding="utf-8") as fp:
-            data = json.load(fp)
-
-        return SessionSnapshot.from_dict(data)
+        return await asyncio.to_thread(_load)

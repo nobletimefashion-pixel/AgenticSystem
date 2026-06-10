@@ -136,7 +136,8 @@ async def get_sessions(token: str = Query("")):
     if not _token_ok(token):
         raise HTTPException(401, "Unauthorized")
     pm = PersistenceManager()
-    return {"sessions": pm.list_sessions()}
+    sessions = await pm.list_sessions()
+    return {"sessions": sessions}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -193,7 +194,7 @@ class Connection:
 
         # Sessions list for sidebar
         pm = PersistenceManager()
-        sessions = pm.list_sessions()
+        sessions = await pm.list_sessions()
 
         # Hooks list
         hooks = []
@@ -388,7 +389,7 @@ async def websocket_endpoint(ws: WebSocket):
                         messages    = agent.session.context_manager.get_messages(),
                         total_usage = agent.session.context_manager.total_usage,
                     )
-                    pm.save_session(snap)
+                    await pm.save_session(snap)
                     await conn.send({"type": "session_saved",
                                      "session_id": snap.session_id})
                     await conn.send_system_info(agent)
@@ -400,7 +401,7 @@ async def websocket_endpoint(ws: WebSocket):
                 session_id = msg.get("session_id", "")
                 try:
                     pm   = PersistenceManager()
-                    snap = pm.load_session(session_id)
+                    snap = await pm.load_session(session_id)
                     if not snap:
                         await conn.send({"type": "agent_error",
                                          "error": f"Session not found: {session_id}"})
@@ -440,7 +441,7 @@ async def websocket_endpoint(ws: WebSocket):
                         messages    = agent.session.context_manager.get_messages(),
                         total_usage = agent.session.context_manager.total_usage,
                     )
-                    cp_id = pm.save_checkpoint(snap)
+                    cp_id = await pm.save_checkpoint(snap)
                     await conn.send({"type": "checkpoint_saved", "checkpoint_id": cp_id})
                 except Exception as e:
                     await conn.send({"type": "agent_error", "error": f"Checkpoint failed: {e}"})
