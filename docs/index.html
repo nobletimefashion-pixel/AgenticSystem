@@ -768,7 +768,7 @@ const COMMANDS = [
   { name:'/model',      desc:'Change the AI model  e.g. /model gpt-4o',
     run: (args)=> { if(args){ setModel(args); syncModelSel(args); } else toggleSettings(); }},
   { name:'/approval',   desc:'Set approval policy  on-request|auto|yolo|never',
-    run: (args)=> { if(args) send({type:'set_approval', policy:args}); }},
+    run: (args)=> { if(args){ send({type:'set_approval', policy:args}); addSysMsg('⚙️',`Approval policy → ${args}`);} }},
   { name:'/cwd',        desc:'Change working directory  e.g. /cwd /home/user/proj',
     run: (args)=> { if(args) send({type:'set_cwd', cwd:args}); }},
   { name:'/sessions',   desc:'Show saved sessions (opens sidebar)',
@@ -1221,12 +1221,13 @@ function renderSessionsSidebar(sessions){
     </div>
   </div>`;
   for(const s of sessions){
-    const date=new Date(s.updated_at).toLocaleDateString();
+    const created=new Date(s.created_at).toLocaleDateString();
+    const updated=new Date(s.updated_at).toLocaleDateString();
     html+=`<div class="sb-session" onclick="loadSession('${esc(s.session_id)}')">
       <div class="sb-session-dot" style="background:var(--tx2)"></div>
       <div class="sb-session-info">
         <div class="sb-session-name">${esc(s.session_id.slice(0,16))}…</div>
-        <div class="sb-session-meta">${s.turn_count} turns · ${date}</div>
+        <div class="sb-session-meta">${s.turn_count} turns · created ${created} · updated ${updated}</div>
       </div>
       <div class="sb-session-actions">
         <button class="sb-session-btn" onclick="event.stopPropagation();loadSession('${esc(s.session_id)}')" title="Resume">▶</button>
@@ -1445,16 +1446,17 @@ function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
 // MARKDOWN
 // ═══════════════════════════════════════════════════════
 function mdToHtml(text){
+  text=esc(text);
   text=text.replace(/```(\w*)\n?([\s\S]*?)```/g,(_,lang,code)=>
-    `<pre><code>${esc(code.trim())}</code>${lang?`<span class="code-lang">${lang}</span>`:''}</pre>`);
-  text=text.replace(/`([^`]+)`/g,(_,c)=>`<code>${esc(c)}</code>`);
+    `<pre><code>${code.trim()}</code>${lang?`<span class="code-lang">${lang}</span>`:''}</pre>`);
+  text=text.replace(/`([^`]+)`/g,(_,c)=>`<code>${c}</code>`);
   text=text.replace(/\*\*\*(.+?)\*\*\*/g,'<strong><em>$1</em></strong>');
   text=text.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
   text=text.replace(/\*(.+?)\*/g,'<em>$1</em>');
   text=text.replace(/^### (.+)$/gm,'<h3>$1</h3>');
   text=text.replace(/^## (.+)$/gm,'<h2>$1</h2>');
   text=text.replace(/^# (.+)$/gm,'<h1>$1</h1>');
-  text=text.replace(/^> (.+)$/gm,'<blockquote>$1</blockquote>');
+  text=text.replace(/^&gt; (.+)$/gm,'<blockquote>$1</blockquote>');
   text=text.replace(/^---$/gm,'<hr/>');
   text=text.replace(/^(\*|-) (.+)$/gm,'<li>$2</li>');
   text=text.replace(/(<li>.*<\/li>\n?)+/g,m=>`<ul>${m}</ul>`);

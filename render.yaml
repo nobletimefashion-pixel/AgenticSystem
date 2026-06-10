@@ -3,7 +3,7 @@ services:
     name: nexus-agent
     runtime: python
     buildCommand: pip install -r requirements-render.txt
-    startCommand: python ui/server.py --host 0.0.0.0 --port $PORT
+    startCommand: python ui/ui_server.py --host 0.0.0.0 --port $PORT
     envVars:
       - key: API_KEY
         sync: false          # you fill this in on Render dashboard

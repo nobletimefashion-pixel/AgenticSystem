@@ -94,21 +94,21 @@ class LLMClient:
         finish_reason: str | None = None
         usage: TokenUsage | None = None
         tool_calls: dict[int, dict[str,Any]] = {}
-        async for chunck in response:
-            if hasattr(chunck, "usage") and chunck.usage:
+        async for chunk in response:
+            if hasattr(chunk, "usage") and chunk.usage:
                 usage = TokenUsage(
-                    prompt_tokens=chunck.usage.prompt_tokens,
-                    completion_tokens=chunck.usage.completion_tokens,
-                    total_tokens=chunck.usage.total_tokens,
+                    prompt_tokens=chunk.usage.prompt_tokens,
+                    completion_tokens=chunk.usage.completion_tokens,
+                    total_tokens=chunk.usage.total_tokens,
                     cached_tokens=(
-                        chunck.usage.prompt_tokens_details.cached_tokens
-                        if chunck.usage.prompt_tokens_details
+                        chunk.usage.prompt_tokens_details.cached_tokens
+                        if chunk.usage.prompt_tokens_details
                         else 0       
                  )
                 )
-            if not chunck.choices:
+            if not chunk.choices:
                 continue
-            choice = chunck.choices[0]
+            choice = chunk.choices[0]
             delta = choice.delta
             
             if choice.finish_reason:

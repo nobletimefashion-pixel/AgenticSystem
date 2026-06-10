@@ -11,12 +11,15 @@ from __future__ import annotations
 import asyncio
 import io
 import json
+import logging
 import mimetypes
 import os
 import sys
 import zipfile
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
@@ -37,7 +40,7 @@ from Agent.agent import Agent
 from Agent.events import AgentEventType
 from Agent.persistence import PersistenceManager, SessionSnapshot
 from Agent.session import Session
-from config.config import Config
+from config.config import ApprovalPolicy, Config
 from config.loader import load_config
 from Tools.base import ToolConfirmation
 
@@ -46,7 +49,7 @@ app = FastAPI(title="Nexus Agent UI", version="2.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"],
                    allow_methods=["*"], allow_headers=["*"])
 
-_UI_HTML = Path(__file__).parent / "nexus_ui.html"
+_UI_HTML = Path(__file__).parent.parent / "docs" / "index.html"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # STATIC ROUTES
@@ -73,10 +76,10 @@ def _token_ok(token: str) -> bool:
 # ─────────────────────────────────────────────────────────────────────────────
 
 @app.get("/files")
-async def list_files(path: str = Query("."), token: str = Query("")):
+async def list_files(path: str = Query("."), token: str = Query(""), cwd: str = Query(None)):
     if not _token_ok(token):
         raise HTTPException(401, "Unauthorized")
-    base   = Path.cwd()
+    base   = Path(cwd).resolve() if cwd else Path.cwd()
     target = (base / path).resolve()
     if not str(target).startswith(str(base)):
         raise HTTPException(403, "Access denied")
@@ -98,10 +101,10 @@ async def list_files(path: str = Query("."), token: str = Query("")):
 
 
 @app.get("/download")
-async def download_file(path: str = Query(...), token: str = Query("")):
+async def download_file(path: str = Query(...), token: str = Query(""), cwd: str = Query(None)):
     if not _token_ok(token):
         raise HTTPException(401, "Unauthorized")
-    base   = Path.cwd()
+    base   = Path(cwd).resolve() if cwd else Path.cwd()
     target = (base / path).resolve()
     if not str(target).startswith(str(base)):
         raise HTTPException(403, "Access denied")
@@ -144,7 +147,6 @@ class Connection:
     def __init__(self, ws: WebSocket):
         self.ws           = ws
         self.config       = load_config(cwd=Path.cwd())
-        self._agent: Agent | None = None
         self._confirm_evt = asyncio.Event()
         self._confirm_ans = True
         self._interrupt   = False
@@ -155,15 +157,11 @@ class Connection:
         try:
             await self.ws.send_text(json.dumps(msg, default=str))
         except Exception:
-            pass
+            logger.exception("Failed to send WebSocket message")
 
     # confirmation bridge -----------------------------------------------------
 
-    def _sync_confirm(self, conf: ToolConfirmation) -> bool:
-        loop = asyncio.get_event_loop()
-        return loop.run_until_complete(self._ask_confirm(conf))
-
-    async def _ask_confirm(self, conf: ToolConfirmation) -> bool:
+    async def ask_confirm(self, conf: ToolConfirmation) -> bool:
         self._confirm_evt.clear()
         await self.send({
             "type":        "confirm_request",
@@ -183,6 +181,7 @@ class Connection:
             from Tools.builtin import get_all_builtin_tools
             tool_names = [t.name for t in get_all_builtin_tools()]
         except Exception:
+            logger.exception("Failed to get builtin tools")
             tool_names = []
 
         mcp_servers: list[dict] = []
@@ -190,7 +189,7 @@ class Connection:
             try:
                 mcp_servers = agent.session.mcp_manager.get_all_servers()
             except Exception:
-                pass
+                logger.exception("Failed to get MCP servers")
 
         # Sessions list for sidebar
         pm = PersistenceManager()
@@ -302,7 +301,7 @@ async def websocket_endpoint(ws: WebSocket):
     async def _ensure_agent() -> Agent:
         nonlocal agent_ctx
         if agent_ctx is None:
-            agent_ctx = Agent(conn.config, confirmation_callback=conn._sync_confirm)
+            agent_ctx = Agent(conn.config, confirmation_callback=conn.ask_confirm)
             await agent_ctx.__aenter__()
         return agent_ctx
 
@@ -312,7 +311,7 @@ async def websocket_endpoint(ws: WebSocket):
             try:
                 await agent_ctx.__aexit__(None, None, None)
             except Exception:
-                pass
+                logger.exception("Failed to close agent")
             agent_ctx = None
 
     await conn.send_system_info()
@@ -364,6 +363,18 @@ async def websocket_endpoint(ws: WebSocket):
                     await conn.send({"type": "agent_error",
                                      "error": f"Directory not found: {cwd}"})
 
+            # ── set_approval ──────────────────────────────────────────────────
+            elif kind == "set_approval":
+                policy = msg.get("policy", "").strip()
+                if policy:
+                    try:
+                        conn.config.approval = ApprovalPolicy(policy)
+                        await _close_agent()
+                        await conn.send_system_info()
+                    except Exception as e:
+                        await conn.send({"type": "agent_error",
+                                         "error": f"Invalid approval policy: {e}"})
+
             # ── save_session ──────────────────────────────────────────────────
             elif kind == "save_session":
                 try:
@@ -403,14 +414,9 @@ async def websocket_endpoint(ws: WebSocket):
                     session.updated_at = snap.updated_at
                     session.turn_count = snap.turn_count
                     session.context_manager.total_usage = snap.total_usage
-                    for m in snap.messages:
-                        role = m.get("role")
-                        if role == "system":   continue
-                        elif role == "user":   session.context_manager.add_user_message(m.get("content",""))
-                        elif role == "assistant": session.context_manager.add_assistant_message(m.get("content",""), m.get("tool_calls"))
-                        elif role == "tool":   session.context_manager.add_tool_result(m.get("tool_call_id",""), m.get("content",""))
+                    session.replay_messages(snap.messages)
                     # Wrap in Agent shell
-                    new_agent          = Agent(conn.config, confirmation_callback=conn._sync_confirm)
+                    new_agent          = Agent(conn.config, confirmation_callback=conn.ask_confirm)
                     new_agent.session  = session
                     agent_ctx          = new_agent
                     await conn.send({"type": "session_loaded", "session_id": session_id})
@@ -513,18 +519,19 @@ async def websocket_endpoint(ws: WebSocket):
                 try:
                     agent = await _ensure_agent()
                     agent.session.context_manager.clear()
-                    agent.session.loop_detecter.clear()
+                    agent.session.loop_detector_obj.clear()
                     await conn.send({"type": "context_cleared"})
                 except Exception as e:
                     await conn.send({"type": "agent_error", "error": str(e)})
 
     except WebSocketDisconnect:
-        pass
+        logger.info("WebSocket disconnected")
     except Exception as e:
+        logger.exception("WebSocket error")
         try:
             await conn.send({"type": "agent_error", "error": str(e)})
         except Exception:
-            pass
+            logger.exception("Failed to send error over WebSocket")
     finally:
         if agent_task and not agent_task.done():
             agent_task.cancel()

@@ -25,7 +25,7 @@ from Tools.builtin.os_security_monitor import OSSecurityMonitorTool
 from Tools.builtin.report_generator import ReportGeneratorTool
 from Tools.builtin.software_architect import SoftwareArchitectTool
 
-__all__ = ["ReadFileTool","WriteFileTool","EditTool","ShellTool","ListDirTool","GrepTool","GlobTool","WebSearchTool","WebFetchTool","TodosTool","MemoryTool","RagTool","BrowserTool","DomainOSINTTool","EmailOSINTTool","GitTool","IPOSINTTool","UsernameOSINTTool","PhoneOSINTTool","VideoCreatorTool","WHOISOSINTTool","CensysOSINTTool","WebSecurityAuditTool","OSSecurityMonitorTool","ReportGeneratorTool","SoftwareArchitectTool"]
+__all__ = ["ReadFileTool","WriteFileTool","EditTool","ShellTool","ListDirTool","GrepTool","GlobTool","WebSearchTool","WebFetchTool","TodosTool","MemoryTool","RAGTool","BrowserTool","DomainOSINTTool","EmailOSINTTool","GitTool","IPOSINTTool","UsernameOSINTTool","PhoneOSINTTool","VideoCreatorTool","WHOISOSINTTool","CensysOSINTTool","WebSecurityAuditTool","OSSecurityMonitorTool","ReportGeneratorTool","SoftwareArchitectTool"]
 
 def get_all_builtin_tools() -> list[type]:
     return [

@@ -1,1 +1,4 @@
 [HOOK] {"timestamp": "2026-06-09T14:47:15.892386", "trigger": "before_agent", "cwd": "/home/darklord/Documents/Agentic-AI-/nexus_agent", "tool_name": null, "user_message": "exit", "error": null}
+[HOOK] {"timestamp": "2026-06-10T02:08:21.240790", "trigger": "before_agent", "cwd": "/home/darklord/Documents/Agentic-AI-/nexus_agent", "tool_name": null, "user_message": "hi", "error": null}
+[HOOK] {"timestamp": "2026-06-10T02:26:38.011017", "trigger": "before_agent", "cwd": "/home/darklord/Documents/Agentic-AI-/nexus_agent", "tool_name": null, "user_message": "hi", "error": null}
+[HOOK] {"timestamp": "2026-06-10T02:27:05.217495", "trigger": "before_agent", "cwd": "/home/darklord/Documents/Agentic-AI-/nexus_agent", "tool_name": null, "user_message": "what tools do you have access to", "error": null}

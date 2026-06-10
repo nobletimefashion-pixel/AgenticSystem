@@ -30,11 +30,9 @@ def ensure_parent_directory(path: str | Path) -> Path:
     return path
 
 def is_binary_file(file_path:str | Path) -> bool:
-    #this function will check if the file is a binary file or not by reading the first 8191 bytes of the file and checking if there are any null bytes in it. If there are null bytes in the first 8191 bytes of the file then it is a binary file and if there are no null bytes then it is a text file.
     try:
         with open(file_path, 'rb') as f:
-            chunk = f.read(8191) #read the first 8191 bytes of the file
-            return b"\x00" in chunk #this checks if there are any null bytes in the first 8191 bytes of the file. If there are null bytes then it is a binary file and if there are no null bytes then it is a text file.
-    except (OSError, IOError) as e: 
-        # If there is an error opening the file, we can choose to treat it as non-binary
-        return False
+            chunk = f.read(8191)
+            return b"\x00" in chunk
+    except (OSError, IOError):
+        return True

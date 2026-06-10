@@ -48,8 +48,9 @@ class ShellTool(Tool):
     ) -> ToolConfirmation | None:
         params = ShellParams(**invocation.params)
 
+        command = params.command.strip().lower()
         for blocked in BLOCKED_COMMANDS:
-            if blocked in params.command:
+            if blocked.lower() in command:
                 return ToolConfirmation(
                     tool_name=self.name,
                     params=invocation.params,

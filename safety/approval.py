@@ -1,10 +1,16 @@
+import inspect
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 import re
-from typing import Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable, Union
 from config.config import ApprovalPolicy
 from Tools.base import ToolConfirmation
+
+ConfirmCallback = Union[
+    Callable[[ToolConfirmation], bool],
+    Callable[[ToolConfirmation], Awaitable[bool]],
+]
 
 
 class ApprovalDecision(str, Enum):
@@ -94,7 +100,7 @@ class ApprovalManager:
         self,
         approval_policy: ApprovalPolicy,
         cwd: Path,
-        confirmation_callback: Callable[[ToolConfirmation], bool] | None = None,
+        confirmation_callback: ConfirmCallback | None = None,
     ) -> None:
         self.approval_policy = approval_policy
         self.cwd = cwd
@@ -149,9 +155,11 @@ class ApprovalManager:
 
         return ApprovalDecision.APPROVED
 
-    def request_confirmation(self, confirmation: ToolConfirmation) -> bool:
+    async def request_confirmation(self, confirmation: ToolConfirmation) -> bool:
         if self.confirmation_callback:
             result = self.confirmation_callback(confirmation)
+            if inspect.isawaitable(result):
+                result = await result
             return result
 
         return True

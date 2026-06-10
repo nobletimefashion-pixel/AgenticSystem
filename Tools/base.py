@@ -111,7 +111,7 @@ class Tool(abc.ABC): #for using abstract class
     
     @property    #it will return dict for mcp tools and basemodel for others like our own tools as they will all have basemodels
     def schema(self) -> dict[str, Any] | type['BaseModel']:
-        raise NotADirectoryError("tool must define schema property or class attribute")
+        raise NotImplementedError("tool must define schema property or class attribute")
     
     @abc.abstractmethod
     async def execute(self, invokation: ToolInvokation) -> ToolResult:

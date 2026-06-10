@@ -1,5 +1,6 @@
 from __future__ import annotations
-from typing import AsyncGenerator, Callable
+from collections.abc import Awaitable
+from typing import AsyncGenerator, Callable, Union
 from Agent.events import AgentEvent, AgentEventType
 from Agent.session import Session
 from Tools.base import ToolConfirmation
@@ -10,8 +11,13 @@ import json
 
 #first all events are given to _agentic_loop then that agentic loop yields those events to main.py and from there it is shown
 
+ConfirmCallback = Union[
+    Callable[[ToolConfirmation], bool],
+    Callable[[ToolConfirmation], Awaitable[bool]],
+]
+
 class Agent:
-    def __init__(self,config:Config,confirmation_callback:Callable[[ToolConfirmation], bool] | None = None,):
+    def __init__(self,config:Config,confirmation_callback: ConfirmCallback | None = None,):
         
         self.config = config
         self.session: Session | None = Session(self.config)
@@ -52,7 +58,6 @@ class Agent:
             tool_schemas = self.session.tool_registry.get_schema()
             tool_calls: list[ToolCall] = []
             usage: TokenUsage | None = None
-            messages_to_send = self.session.context_manager.get_messages()
             async for event in self.session.client.chat_completion(self.session.context_manager.get_messages(), tools=tool_schemas if tool_schemas else None, stream=True):
                 
                 if event.type == StreamEventType.TEXT_DELTA:
@@ -81,7 +86,7 @@ class Agent:
                 else None
                 )
             if response_text:
-                self.session.loop_detector.record_action(
+                self.session.loop_detector_obj.record_action(
                  'response',
                  text=response_text,
                  )
@@ -102,8 +107,8 @@ class Agent:
                     tool_call.name,
                     tool_call.arguments
                 )
-                self.session.loop_detector.record_action(
-                 'tool',
+                self.session.loop_detector_obj.record_action(
+                 'tool_call',
                  tool_name=tool_call.name,
                  args=tool_call.arguments,
                  )
@@ -135,7 +140,7 @@ class Agent:
                     tool_result.tool_call_id,
                     tool_result.content
                 )
-            loop_detection_error = self.session.loop_detector.check_for_loop()
+            loop_detection_error = self.session.loop_detector_obj.check_for_loop()
             if loop_detection_error:
                 loop_prompt = create_loop_breaker_prompt(loop_detection_error)
                 self.session.context_manager.add_user_message(loop_prompt)

@@ -42,14 +42,13 @@ def _get_project_config(cwd: Path) ->Path | None:
         
     return None
 
-def _get_agent_md_file(cwd: Path) ->Path | None:
+def _get_agent_md_content(cwd: Path) -> str | None:
     current = cwd.resolve()
     
     if current.is_dir():
         agent_md_file = current / AGENT_MD_FILE
         if agent_md_file.is_file():
-            content = agent_md_file.read_text(encoding="utf-8")
-            return content
+            return agent_md_file.read_text(encoding="utf-8")
         
     return None
 
@@ -89,11 +88,11 @@ def load_config(cwd: Path | None) -> Config:
         config_dict["cwd"] = cwd
         
     if "developer_instructions" not in config_dict:
-        agent_md_content = _get_agent_md_file(cwd)
+        agent_md_content = _get_agent_md_content(cwd)
         if agent_md_content:
             config_dict["developer_instructions"] = agent_md_content
     try:
         config = Config(**config_dict)
     except Exception as e:
-        raise ConfigError(f"invalide configuration: {e}") from e
+        raise ConfigError(f"invalid configuration: {e}") from e
     return config

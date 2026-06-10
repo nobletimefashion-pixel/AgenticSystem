@@ -243,7 +243,7 @@ class CLI:
             self.tui.show_help()
         elif command == "/clear":
             self.agent.session.context_manager.clear()
-            self.agent.session.loop_detecter.clear()
+            self.agent.session.loop_detector_obj.clear()
             console.print("[success]Conversation cleared [/success]")
         elif command == "/config":
             console.print("\n[bold]Current Configuration[/bold]")
@@ -326,31 +326,14 @@ class CLI:
                 if not snapshot:
                     console.print(f"[error]Session does not exist [/error]")
                 else:
-                    session = Session(
-                        config=self.config,
-                    )
+                    session = Session(config=self.config)
                     await session.initialize()
                     session.session_id = snapshot.session_id
                     session.created_at = snapshot.created_at
                     session.updated_at = snapshot.updated_at
                     session.turn_count = snapshot.turn_count
                     session.context_manager.total_usage = snapshot.total_usage
-
-                    for msg in snapshot.messages:
-                        if msg.get("role") == "system":
-                            continue
-                        elif msg["role"] == "user":
-                            session.context_manager.add_user_message(
-                                msg.get("content", "")
-                            )
-                        elif msg["role"] == "assistant":
-                            session.context_manager.add_assistant_message(
-                                msg.get("content", ""), msg.get("tool_calls")
-                            )
-                        elif msg["role"] == "tool":
-                            session.context_manager.add_tool_result(
-                                msg.get("tool_call_id", ""), msg.get("content", "")
-                            )
+                    session.replay_messages(snapshot.messages)
 
                     await self.agent.session.client.close()
                     await self.agent.session.mcp_manager.shutdown()
@@ -373,38 +356,21 @@ class CLI:
             console.print(f"[success]Checkpoint created: {checkpoint_id}[/success]")
         elif cmd_name == "/restore":
             if not cmd_args:
-                console.print(f"[error]Usage: /restire <checkpoint_id> [/error]")
+                console.print(f"[error]Usage: /restore <checkpoint_id> [/error]")
             else:
                 persistence_manager = PersistenceManager()
                 snapshot = persistence_manager.load_checkpoint(cmd_args)
                 if not snapshot:
                     console.print(f"[error]Checkpoint does not exist [/error]")
                 else:
-                    session = Session(
-                        config=self.config,
-                    )
+                    session = Session(config=self.config)
                     await session.initialize()
                     session.session_id = snapshot.session_id
                     session.created_at = snapshot.created_at
                     session.updated_at = snapshot.updated_at
                     session.turn_count = snapshot.turn_count
                     session.context_manager.total_usage = snapshot.total_usage
-
-                    for msg in snapshot.messages:
-                        if msg.get("role") == "system":
-                            continue
-                        elif msg["role"] == "user":
-                            session.context_manager.add_user_message(
-                                msg.get("content", "")
-                            )
-                        elif msg["role"] == "assistant":
-                            session.context_manager.add_assistant_message(
-                                msg.get("content", ""), msg.get("tool_calls")
-                            )
-                        elif msg["role"] == "tool":
-                            session.context_manager.add_tool_result(
-                                msg.get("tool_call_id", ""), msg.get("content", "")
-                            )
+                    session.replay_messages(snapshot.messages)
 
                     await self.agent.session.client.close()
                     await self.agent.session.mcp_manager.shutdown()

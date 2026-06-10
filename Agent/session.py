@@ -1,5 +1,6 @@
 from datetime import datetime
 import json
+from typing import Any
 import uuid
 from Tools.discovery import ToolDiscoveryManager
 from Tools.mcp.mcp_manager import MCPManager
@@ -24,7 +25,7 @@ class Session:
         self.mcp_manager = MCPManager(self.config)
         self.chat_compactor = ChatCompactor(self.client)
         self.approval_manager = ApprovalManager(self.config.approval,self.config.cwd,)
-        self.loop_detecter = LoopDetector()
+        self.loop_detector_obj = LoopDetector()
         self.hook_system = HookSystem(config)
         self.session_id = str(uuid.uuid4())
         self.created_at = datetime.now()
@@ -62,6 +63,22 @@ class Session:
         self.updated_at = datetime.now()
         
         return self.turn_count
+
+    def replay_messages(self, messages: list[dict[str, Any]]) -> None:
+        for msg in messages:
+            role = msg.get("role")
+            if role == "system":
+                continue
+            elif role == "user":
+                self.context_manager.add_user_message(msg.get("content", ""))
+            elif role == "assistant":
+                self.context_manager.add_assistant_message(
+                    msg.get("content", ""), msg.get("tool_calls")
+                )
+            elif role == "tool":
+                self.context_manager.add_tool_result(
+                    msg.get("tool_call_id", ""), msg.get("content", "")
+                )
 
     def get_stats(self) -> dict[str, Any]:
         return {
