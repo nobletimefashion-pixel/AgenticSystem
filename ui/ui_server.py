@@ -1,30 +1,9 @@
-# ui/server.py
+# ui/ui_server.py
 """
-Nexus Agent — Web UI Server
-════════════════════════════
-FastAPI + WebSocket bridge between the browser and the agent.
-
-Architecture:
-  Browser ──WebSocket──► server.py ──async generator──► Agent ──Tools──► OS
-
-The browser sends JSON messages:
-  { "type": "chat",    "content": "..." }
-  { "type": "confirm", "approved": true/false }
-  { "type": "interrupt" }
-  { "type": "set_model", "model": "..." }
-  { "type": "set_cwd",   "cwd": "..." }
-
-The server streams JSON back:
-  { "type": "text_delta",     "content": "..." }
-  { "type": "text_complete",  "content": "..." }
-  { "type": "tool_start",     "call_id", "name", "kind", "args" }
-  { "type": "tool_complete",  "call_id", "name", "kind", "success",
-                               "output", "error", "diff", "metadata" }
-  { "type": "confirm_request","call_id", "tool_name", "description",
-                               "command", "diff", "is_dangerous" }
-  { "type": "agent_error",    "error": "..." }
-  { "type": "agent_end" }
-  { "type": "system_info",    "cwd", "model", "tools" }
+Nexus Agent — Web UI Server  (full-featured edition)
+══════════════════════════════════════════════════════
+Handles:  chat · tool streaming · confirmations · sessions · checkpoints
+          hooks · MCP server management · loop-detector events · /commands
 """
 
 from __future__ import annotations
@@ -32,154 +11,129 @@ from __future__ import annotations
 import asyncio
 import io
 import json
+import mimetypes
 import os
 import sys
+import zipfile
 from pathlib import Path
 from typing import Any
 
 import uvicorn
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 
-# ── locate the agent package ─────────────────────────────────────────────────
+# ── locate project root ───────────────────────────────────────────────────────
 _HERE = Path(__file__).parent.resolve()
-# Walk up until we find the agent root (contains "Agent/" and "Tools/")
 _ROOT = _HERE
-for _candidate in [_HERE, _HERE.parent, _HERE.parent.parent]:
-    if (_candidate / "Agent").is_dir() and (_candidate / "Tools").is_dir():
-        _ROOT = _candidate
+for _c in [_HERE, _HERE.parent, _HERE.parent.parent]:
+    if (_c / "Agent").is_dir() and (_c / "Tools").is_dir():
+        _ROOT = _c
         break
-
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from Agent.agent import Agent
 from Agent.events import AgentEventType
+from Agent.persistence import PersistenceManager, SessionSnapshot
+from Agent.session import Session
+from config.config import Config
 from config.loader import load_config
 from Tools.base import ToolConfirmation
 
 # ─────────────────────────────────────────────────────────────────────────────
-app = FastAPI(title="Nexus Agent UI", version="1.0.0")
+app = FastAPI(title="Nexus Agent UI", version="2.0.0")
+app.add_middleware(CORSMiddleware, allow_origins=["*"],
+                   allow_methods=["*"], allow_headers=["*"])
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+_UI_HTML = Path(__file__).parent / "nexus_ui.html"
 
-# ── serve the single-page frontend inline ────────────────────────────────────
-_UI_HTML_PATH = Path(__file__).parent / "nexus_ui.html"
-
+# ─────────────────────────────────────────────────────────────────────────────
+# STATIC ROUTES
+# ─────────────────────────────────────────────────────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    if _UI_HTML_PATH.exists():
-        return HTMLResponse(_UI_HTML_PATH.read_text(encoding="utf-8"))
-    return HTMLResponse("<h1>UI file not found. Place nexus_ui.html next to server.py</h1>")
+    if _UI_HTML.exists():
+        return HTMLResponse(_UI_HTML.read_text(encoding="utf-8"))
+    return HTMLResponse("<h1>nexus_ui.html not found next to ui_server.py</h1>")
 
 
-# ── File browser + download endpoints ────────────────────────────────────────
-import zipfile, mimetypes
-from fastapi import Query
-from fastapi.responses import FileResponse, StreamingResponse
+# ─────────────────────────────────────────────────────────────────────────────
+# TOKEN HELPER
+# ─────────────────────────────────────────────────────────────────────────────
 
-def _check_token(token: str = "") -> bool:
-    """Validate the download token (same secret as WebSocket)."""
-    required = os.environ.get("UI_SECRET", "")
-    return not required or token == required
+def _token_ok(token: str) -> bool:
+    req = os.environ.get("UI_SECRET", "")
+    return not req or token == req
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FILE BROWSER + DOWNLOAD
+# ─────────────────────────────────────────────────────────────────────────────
 
 @app.get("/files")
-async def list_files(
-    path:  str   = Query(".", description="Directory path relative to project root"),
-    token: str   = Query("",  description="UI_SECRET token"),
-):
-    """Return a JSON list of files/dirs at the given path."""
-    if not _check_token(token):
-        from fastapi import HTTPException
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
-    base = Path.cwd()
+async def list_files(path: str = Query("."), token: str = Query("")):
+    if not _token_ok(token):
+        raise HTTPException(401, "Unauthorized")
+    base   = Path.cwd()
     target = (base / path).resolve()
-
-    # Safety: never escape the project root
     if not str(target).startswith(str(base)):
-        from fastapi import HTTPException
-        raise HTTPException(status_code=403, detail="Access denied")
-
+        raise HTTPException(403, "Access denied")
     if not target.exists():
-        return {"error": f"Path not found: {path}", "items": []}
-
+        return {"error": f"Not found: {path}", "items": []}
     items = []
     if target.is_file():
-        items.append({
-            "name": target.name,
-            "path": str(target.relative_to(base)),
-            "type": "file",
-            "size": target.stat().st_size,
-        })
+        items.append({"name": target.name, "path": str(target.relative_to(base)),
+                      "type": "file", "size": target.stat().st_size})
     else:
         for item in sorted(target.iterdir(), key=lambda p: (p.is_file(), p.name)):
-            items.append({
-                "name":  item.name,
-                "path":  str(item.relative_to(base)),
-                "type":  "file" if item.is_file() else "dir",
-                "size":  item.stat().st_size if item.is_file() else None,
-            })
-
+            try:
+                items.append({"name": item.name, "path": str(item.relative_to(base)),
+                               "type": "file" if item.is_file() else "dir",
+                               "size": item.stat().st_size if item.is_file() else None})
+            except Exception:
+                pass
     return {"cwd": str(base), "path": str(target.relative_to(base)), "items": items}
 
 
 @app.get("/download")
-async def download_file(
-    path:  str = Query(..., description="File or directory path relative to project root"),
-    token: str = Query("",  description="UI_SECRET token"),
-):
-    """
-    Download a single file, or a directory as a .zip archive.
-    Example: GET /download?path=my_project&token=SECRET
-    """
-    if not _check_token(token):
-        from fastapi import HTTPException
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
+async def download_file(path: str = Query(...), token: str = Query("")):
+    if not _token_ok(token):
+        raise HTTPException(401, "Unauthorized")
     base   = Path.cwd()
     target = (base / path).resolve()
-
     if not str(target).startswith(str(base)):
-        from fastapi import HTTPException
-        raise HTTPException(status_code=403, detail="Access denied")
-
+        raise HTTPException(403, "Access denied")
     if not target.exists():
-        from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail=f"Not found: {path}")
-
-    # Single file → serve directly
+        raise HTTPException(404, f"Not found: {path}")
     if target.is_file():
-        media_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
-        return FileResponse(
-            path=str(target),
-            filename=target.name,
-            media_type=media_type,
-        )
+        mt = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+        return FileResponse(str(target), filename=target.name, media_type=mt)
 
-    # Directory → zip it on the fly and stream to browser
-    def _zip_generator():
+    def _gen():
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-            for file in target.rglob("*"):
-                if file.is_file():
-                    zf.write(file, file.relative_to(target))
+            for f in target.rglob("*"):
+                if f.is_file():
+                    zf.write(f, f.relative_to(target))
         buf.seek(0)
         yield buf.read()
 
-    return StreamingResponse(
-        _zip_generator(),
-        media_type="application/zip",
-        headers={"Content-Disposition": f'attachment; filename="{target.name}.zip"'},
-    )
+    return StreamingResponse(_gen(), media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{target.name}.zip"'})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SESSIONS REST (for sidebar listing)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.get("/sessions")
+async def get_sessions(token: str = Query("")):
+    if not _token_ok(token):
+        raise HTTPException(401, "Unauthorized")
+    pm = PersistenceManager()
+    return {"sessions": pm.list_sessions()}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -187,17 +141,15 @@ async def download_file(
 # ─────────────────────────────────────────────────────────────────────────────
 
 class Connection:
-    """Holds all state for one browser tab / WebSocket connection."""
-
     def __init__(self, ws: WebSocket):
         self.ws           = ws
         self.config       = load_config(cwd=Path.cwd())
         self._agent: Agent | None = None
         self._confirm_evt = asyncio.Event()
-        self._confirm_ans: bool = True
+        self._confirm_ans = True
         self._interrupt   = False
 
-    # ── outbound helpers ─────────────────────────────────────────────────────
+    # outbound ----------------------------------------------------------------
 
     async def send(self, msg: dict):
         try:
@@ -205,15 +157,11 @@ class Connection:
         except Exception:
             pass
 
-    # ── confirmation callback (called from agent thread) ─────────────────────
+    # confirmation bridge -----------------------------------------------------
 
-    def _sync_confirm(self, confirmation: ToolConfirmation) -> bool:
-        """
-        Bridge: agent calls this synchronously; we need to suspend it
-        and wait for the browser's answer via an asyncio Event.
-        """
+    def _sync_confirm(self, conf: ToolConfirmation) -> bool:
         loop = asyncio.get_event_loop()
-        return loop.run_until_complete(self._ask_confirm(confirmation))
+        return loop.run_until_complete(self._ask_confirm(conf))
 
     async def _ask_confirm(self, conf: ToolConfirmation) -> bool:
         self._confirm_evt.clear()
@@ -228,92 +176,103 @@ class Connection:
         await self._confirm_evt.wait()
         return self._confirm_ans
 
-    # ── system info ──────────────────────────────────────────────────────────
+    # system info -------------------------------------------------------------
 
-    async def send_system_info(self):
-        # dynamically load tool list
+    async def send_system_info(self, agent: Agent | None = None):
         try:
             from Tools.builtin import get_all_builtin_tools
             tool_names = [t.name for t in get_all_builtin_tools()]
         except Exception:
             tool_names = []
 
+        mcp_servers: list[dict] = []
+        if agent and agent.session:
+            try:
+                mcp_servers = agent.session.mcp_manager.get_all_servers()
+            except Exception:
+                pass
+
+        # Sessions list for sidebar
+        pm = PersistenceManager()
+        sessions = pm.list_sessions()
+
+        # Hooks list
+        hooks = []
+        if self.config.hooks_enabled:
+            hooks = [
+                {"name": h.name, "trigger": h.trigger.value, "enabled": h.enabled}
+                for h in self.config.hooks
+            ]
+
         await self.send({
-            "type":  "system_info",
-            "cwd":   str(self.config.cwd),
-            "model": self.config.model_name,
-            "tools": tool_names,
+            "type":        "system_info",
+            "cwd":         str(self.config.cwd),
+            "model":       self.config.model_name,
+            "tools":       tool_names,
+            "mcp_servers": mcp_servers,
+            "sessions":    sessions,
+            "hooks":       hooks,
+            "approval":    self.config.approval.value,
+            "max_turns":   self.config.max_turns,
         })
 
-    # ── run one agent turn ───────────────────────────────────────────────────
+    # run agent ---------------------------------------------------------------
 
-    async def run_message(self, content: str):
+    async def run_message(self, content: str, agent: Agent):
         self._interrupt = False
+        async for event in agent.run(content):
+            if self._interrupt:
+                break
+            t = event.type
 
-        async with Agent(
-            self.config,
-            confirmation_callback=self._sync_confirm,
-        ) as agent:
-            self._agent = agent
-            async for event in agent.run(content):
-                if self._interrupt:
-                    break
+            if t == AgentEventType.TEXT_DELTA:
+                await self.send({"type": "text_delta",
+                                 "content": event.data.get("content", "")})
 
-                t = event.type
+            elif t == AgentEventType.TEXT_COMPLETE:
+                await self.send({"type": "text_complete",
+                                 "content": event.data.get("content", "")})
 
-                if t == AgentEventType.TEXT_DELTA:
-                    await self.send({
-                        "type":    "text_delta",
-                        "content": event.data.get("content", ""),
-                    })
+            elif t == AgentEventType.TOOL_CALL_START:
+                kind = None
+                try:
+                    tool = agent.session.tool_registry.get(event.data["name"])
+                    if tool:
+                        kind = tool.kind.value
+                except Exception:
+                    pass
+                await self.send({
+                    "type":    "tool_start",
+                    "call_id": event.data.get("call_id", ""),
+                    "name":    event.data.get("name", ""),
+                    "kind":    kind,
+                    "args":    event.data.get("arguments", {}),
+                })
 
-                elif t == AgentEventType.TEXT_COMPLETE:
-                    await self.send({
-                        "type":    "text_complete",
-                        "content": event.data.get("content", ""),
-                    })
+            elif t == AgentEventType.TOOL_CALL_COMPLETE:
+                await self.send({
+                    "type":      "tool_complete",
+                    "call_id":   event.data.get("call_id", ""),
+                    "name":      event.data.get("name", ""),
+                    "success":   event.data.get("success", False),
+                    "output":    (event.data.get("output", "") or "")[:4000],
+                    "error":     event.data.get("error"),
+                    "diff":      event.data.get("diff"),
+                    "metadata":  event.data.get("metadata", {}),
+                    "truncated": event.data.get("truncated", False),
+                    "exit_code": event.data.get("exit_code"),
+                })
 
-                elif t == AgentEventType.TOOL_CALL_START:
-                    # get kind from registry
-                    kind = None
-                    try:
-                        tool = agent.session.tool_registry.get(event.data["name"])
-                        if tool:
-                            kind = tool.kind.value
-                    except Exception:
-                        pass
-                    await self.send({
-                        "type":    "tool_start",
-                        "call_id": event.data.get("call_id", ""),
-                        "name":    event.data.get("name", ""),
-                        "kind":    kind,
-                        "args":    event.data.get("arguments", {}),
-                    })
+            elif t == AgentEventType.LOOP_DETECTOR:
+                await self.send({"type": "loop_detected",
+                                 "content": event.data.get("content", "")})
 
-                elif t == AgentEventType.TOOL_CALL_COMPLETE:
-                    await self.send({
-                        "type":     "tool_complete",
-                        "call_id":  event.data.get("call_id", ""),
-                        "name":     event.data.get("name", ""),
-                        "success":  event.data.get("success", False),
-                        "output":   (event.data.get("output", "") or "")[:4000],
-                        "error":    event.data.get("error"),
-                        "diff":     event.data.get("diff"),
-                        "metadata": event.data.get("metadata", {}),
-                        "truncated":event.data.get("truncated", False),
-                        "exit_code":event.data.get("exit_code"),
-                    })
+            elif t == AgentEventType.AGENT_ERROR:
+                await self.send({"type": "agent_error",
+                                 "error": event.data.get("error", "Unknown error")})
 
-                elif t == AgentEventType.AGENT_ERROR:
-                    await self.send({
-                        "type":  "agent_error",
-                        "error": event.data.get("error", "Unknown error"),
-                    })
-
-                elif t == AgentEventType.AGENT_END:
-                    await self.send({"type": "agent_end"})
-
-            self._agent = None
+            elif t == AgentEventType.AGENT_END:
+                await self.send({"type": "agent_end"})
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -324,25 +283,39 @@ class Connection:
 async def websocket_endpoint(ws: WebSocket):
     await ws.accept()
 
-    # ── Token auth (only enforced when UI_SECRET env var is set) ─────────────
-    # On Render: set  UI_SECRET=some-long-random-string  in Environment Variables
-    # Users connect to:  wss://your-app.onrender.com/ws?token=some-long-random-string
-    required_token = os.environ.get("UI_SECRET", "")
-    if required_token:
-        provided_token = ws.query_params.get("token", "")
-        if provided_token != required_token:
-            await ws.send_text(json.dumps({
-                "type":  "agent_error",
-                "error": "❌ Unauthorized — invalid or missing token. "
-                         "Add ?token=YOUR_SECRET to the WebSocket URL in Settings."
-            }))
-            await ws.close(code=4001, reason="Unauthorized")
-            return
+    # auth
+    req_token = os.environ.get("UI_SECRET", "")
+    if req_token and ws.query_params.get("token", "") != req_token:
+        await ws.send_text(json.dumps({
+            "type":  "agent_error",
+            "error": "❌ Unauthorized — invalid or missing token. "
+                     "Add ?token=YOUR_SECRET to the WebSocket URL in Settings."
+        }))
+        await ws.close(code=4001, reason="Unauthorized")
+        return
 
-    conn = Connection(ws)
-    await conn.send_system_info()
-
+    conn        = Connection(ws)
     agent_task: asyncio.Task | None = None
+    # Persistent agent across messages within one WS connection
+    agent_ctx: Agent | None = None
+
+    async def _ensure_agent() -> Agent:
+        nonlocal agent_ctx
+        if agent_ctx is None:
+            agent_ctx = Agent(conn.config, confirmation_callback=conn._sync_confirm)
+            await agent_ctx.__aenter__()
+        return agent_ctx
+
+    async def _close_agent():
+        nonlocal agent_ctx
+        if agent_ctx:
+            try:
+                await agent_ctx.__aexit__(None, None, None)
+            except Exception:
+                pass
+            agent_ctx = None
+
+    await conn.send_system_info()
 
     try:
         while True:
@@ -350,46 +323,200 @@ async def websocket_endpoint(ws: WebSocket):
             msg = json.loads(raw)
             kind = msg.get("type")
 
-            # ── chat message ─────────────────────────────────────────────────
+            # ── chat ─────────────────────────────────────────────────────────
             if kind == "chat":
                 content = msg.get("content", "").strip()
                 if not content:
                     continue
-                # cancel previous task if still running
                 if agent_task and not agent_task.done():
                     agent_task.cancel()
-                agent_task = asyncio.create_task(conn.run_message(content))
+                agent = await _ensure_agent()
+                agent_task = asyncio.create_task(conn.run_message(content, agent))
 
-            # ── confirmation answer ──────────────────────────────────────────
+            # ── confirm ───────────────────────────────────────────────────────
             elif kind == "confirm":
                 conn._confirm_ans = bool(msg.get("approved", True))
                 conn._confirm_evt.set()
 
-            # ── interrupt ────────────────────────────────────────────────────
+            # ── interrupt ─────────────────────────────────────────────────────
             elif kind == "interrupt":
                 conn._interrupt = True
                 if agent_task and not agent_task.done():
                     agent_task.cancel()
                 await conn.send({"type": "agent_end"})
 
-            # ── change model ─────────────────────────────────────────────────
+            # ── set_model ─────────────────────────────────────────────────────
             elif kind == "set_model":
                 model = msg.get("model", "").strip()
                 if model:
                     conn.config.model_name = model
-                    await conn.send({"type": "system_info",
-                                     "cwd": str(conn.config.cwd),
-                                     "model": conn.config.model_name})
+                    await _close_agent()     # force new agent with new model
+                    await conn.send_system_info()
 
-            # ── change cwd ───────────────────────────────────────────────────
+            # ── set_cwd ───────────────────────────────────────────────────────
             elif kind == "set_cwd":
                 cwd = Path(msg.get("cwd", ".")).expanduser().resolve()
                 if cwd.is_dir():
                     conn.config = load_config(cwd=cwd)
+                    await _close_agent()
                     await conn.send_system_info()
                 else:
                     await conn.send({"type": "agent_error",
                                      "error": f"Directory not found: {cwd}"})
+
+            # ── save_session ──────────────────────────────────────────────────
+            elif kind == "save_session":
+                try:
+                    agent = await _ensure_agent()
+                    pm = PersistenceManager()
+                    snap = SessionSnapshot(
+                        session_id  = agent.session.session_id,
+                        created_at  = agent.session.created_at,
+                        updated_at  = agent.session.updated_at,
+                        turn_count  = agent.session.turn_count,
+                        messages    = agent.session.context_manager.get_messages(),
+                        total_usage = agent.session.context_manager.total_usage,
+                    )
+                    pm.save_session(snap)
+                    await conn.send({"type": "session_saved",
+                                     "session_id": snap.session_id})
+                    await conn.send_system_info(agent)
+                except Exception as e:
+                    await conn.send({"type": "agent_error", "error": f"Save failed: {e}"})
+
+            # ── load_session ──────────────────────────────────────────────────
+            elif kind == "load_session":
+                session_id = msg.get("session_id", "")
+                try:
+                    pm   = PersistenceManager()
+                    snap = pm.load_session(session_id)
+                    if not snap:
+                        await conn.send({"type": "agent_error",
+                                         "error": f"Session not found: {session_id}"})
+                        continue
+                    await _close_agent()
+                    # Build a fresh session and replay messages
+                    session = Session(config=conn.config)
+                    await session.initialize()
+                    session.session_id = snap.session_id
+                    session.created_at = snap.created_at
+                    session.updated_at = snap.updated_at
+                    session.turn_count = snap.turn_count
+                    session.context_manager.total_usage = snap.total_usage
+                    for m in snap.messages:
+                        role = m.get("role")
+                        if role == "system":   continue
+                        elif role == "user":   session.context_manager.add_user_message(m.get("content",""))
+                        elif role == "assistant": session.context_manager.add_assistant_message(m.get("content",""), m.get("tool_calls"))
+                        elif role == "tool":   session.context_manager.add_tool_result(m.get("tool_call_id",""), m.get("content",""))
+                    # Wrap in Agent shell
+                    new_agent          = Agent(conn.config, confirmation_callback=conn._sync_confirm)
+                    new_agent.session  = session
+                    agent_ctx          = new_agent
+                    await conn.send({"type": "session_loaded", "session_id": session_id})
+                    await conn.send_system_info(new_agent)
+                    # Send history to frontend
+                    await conn.send({"type": "session_history",
+                                     "messages": snap.messages})
+                except Exception as e:
+                    await conn.send({"type": "agent_error", "error": f"Load failed: {e}"})
+
+            # ── checkpoint ────────────────────────────────────────────────────
+            elif kind == "checkpoint":
+                try:
+                    agent = await _ensure_agent()
+                    pm   = PersistenceManager()
+                    snap = SessionSnapshot(
+                        session_id  = agent.session.session_id,
+                        created_at  = agent.session.created_at,
+                        updated_at  = agent.session.updated_at,
+                        turn_count  = agent.session.turn_count,
+                        messages    = agent.session.context_manager.get_messages(),
+                        total_usage = agent.session.context_manager.total_usage,
+                    )
+                    cp_id = pm.save_checkpoint(snap)
+                    await conn.send({"type": "checkpoint_saved", "checkpoint_id": cp_id})
+                except Exception as e:
+                    await conn.send({"type": "agent_error", "error": f"Checkpoint failed: {e}"})
+
+            # ── add_hook ──────────────────────────────────────────────────────
+            elif kind == "add_hook":
+                try:
+                    from config.config import HookConfig, HookTrigger
+                    hook = HookConfig(
+                        name    = msg.get("name", "custom_hook"),
+                        trigger = HookTrigger(msg.get("trigger", "after_tool")),
+                        command = msg.get("command") or None,
+                        script  = msg.get("script")  or None,
+                        enabled = True,
+                    )
+                    conn.config.hooks.append(hook)
+                    conn.config.hooks_enabled = True
+                    await _close_agent()    # new agent picks up new hooks
+                    await conn.send({"type": "hook_added", "name": hook.name})
+                    await conn.send_system_info()
+                except Exception as e:
+                    await conn.send({"type": "agent_error", "error": f"Hook error: {e}"})
+
+            # ── remove_hook ───────────────────────────────────────────────────
+            elif kind == "remove_hook":
+                name = msg.get("name", "")
+                conn.config.hooks = [h for h in conn.config.hooks if h.name != name]
+                if not conn.config.hooks:
+                    conn.config.hooks_enabled = False
+                await _close_agent()
+                await conn.send({"type": "hook_removed", "name": name})
+                await conn.send_system_info()
+
+            # ── add_mcp ───────────────────────────────────────────────────────
+            elif kind == "add_mcp":
+                try:
+                    from config.config import MCPServerConfig
+                    server_name = msg.get("name", "").strip()
+                    url         = msg.get("url",  "").strip() or None
+                    command     = msg.get("command", "").strip() or None
+                    args        = msg.get("args", [])
+
+                    if not server_name:
+                        await conn.send({"type": "agent_error", "error": "MCP server name required"})
+                        continue
+
+                    cfg = MCPServerConfig(url=url, command=command, args=args)
+                    conn.config.mcp_server[server_name] = cfg
+                    await _close_agent()     # reconnect with new MCP
+                    agent = await _ensure_agent()
+                    await conn.send({"type": "mcp_added", "name": server_name})
+                    await conn.send_system_info(agent)
+                except Exception as e:
+                    await conn.send({"type": "agent_error", "error": f"MCP error: {e}"})
+
+            # ── remove_mcp ────────────────────────────────────────────────────
+            elif kind == "remove_mcp":
+                name = msg.get("name", "")
+                conn.config.mcp_server.pop(name, None)
+                await _close_agent()
+                agent = await _ensure_agent()
+                await conn.send({"type": "mcp_removed", "name": name})
+                await conn.send_system_info(agent)
+
+            # ── get_stats ─────────────────────────────────────────────────────
+            elif kind == "get_stats":
+                try:
+                    agent = await _ensure_agent()
+                    stats = agent.session.get_stats()
+                    await conn.send({"type": "stats", "data": stats})
+                except Exception as e:
+                    await conn.send({"type": "agent_error", "error": str(e)})
+
+            # ── clear_context ─────────────────────────────────────────────────
+            elif kind == "clear_context":
+                try:
+                    agent = await _ensure_agent()
+                    agent.session.context_manager.clear()
+                    agent.session.loop_detecter.clear()
+                    await conn.send({"type": "context_cleared"})
+                except Exception as e:
+                    await conn.send({"type": "agent_error", "error": str(e)})
 
     except WebSocketDisconnect:
         pass
@@ -401,6 +528,7 @@ async def websocket_endpoint(ws: WebSocket):
     finally:
         if agent_task and not agent_task.done():
             agent_task.cancel()
+        await _close_agent()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -414,22 +542,16 @@ def launch(host: str = "127.0.0.1", port: int = 7860, open_browser: bool = True)
             import time; time.sleep(1.2)
             webbrowser.open(f"http://{host}:{port}")
         threading.Thread(target=_open, daemon=True).start()
-
     print(f"\n🌐  Nexus Agent UI  →  http://{host}:{port}\n")
     uvicorn.run(app, host=host, port=port, log_level="info")
 
 
 def _cli():
-    """Entry point for both  python ui/server.py  and  python -m ui.server"""
     import argparse
     ap = argparse.ArgumentParser(description="Nexus Agent Web UI Server")
-    ap.add_argument("--host",       default=os.environ.get("HOST", "127.0.0.1"),
-                    help="Bind host (default: 127.0.0.1, Render sets 0.0.0.0)")
-    ap.add_argument("--port",       type=int,
-                    default=int(os.environ.get("PORT", 7860)),
-                    help="Bind port (default: 7860, Render sets $PORT automatically)")
-    ap.add_argument("--no-browser", action="store_true",
-                    help="Do not open a browser tab on startup")
+    ap.add_argument("--host", default=os.environ.get("HOST", "127.0.0.1"))
+    ap.add_argument("--port", type=int, default=int(os.environ.get("PORT", 7860)))
+    ap.add_argument("--no-browser", action="store_true")
     args = ap.parse_args()
     launch(args.host, args.port, open_browser=not args.no_browser)
 

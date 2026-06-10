@@ -1,0 +1,1004 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nexus Agent — AI Coding Agent for the Terminal</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg: #0b0d14;
+      --bg2: #11141f;
+      --bg3: #181d2e;
+      --bg4: #1f2640;
+      --border: #262f4a;
+      --text: #e2e4ed;
+      --text2: #9399b3;
+      --accent: #7c5cfc;
+      --accent2: #5b3cd9;
+      --green: #3dd68c;
+      --cyan: #5ac8fa;
+      --yellow: #ffd60a;
+      --red: #ff4757;
+      --pink: #ff6b9d;
+      --orange: #ff9f43;
+      --radius: 12px;
+      --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+    ::selection { background: var(--accent); color: #fff; }
+
+    /* ── Particles Canvas ───────────────────────────────────────── */
+    #particles {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      z-index: 0; pointer-events: none;
+    }
+
+    /* ── Navigation ─────────────────────────────────────────────── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      background: rgba(11,13,20,0.72);
+      backdrop-filter: blur(16px) saturate(180%);
+      -webkit-backdrop-filter: blur(16px) saturate(180%);
+      border-bottom: 1px solid var(--border);
+      padding: 0 2rem;
+      display: flex; align-items: center; justify-content: space-between;
+      height: 64px;
+    }
+    nav .logo {
+      font-weight: 700; font-size: 1.2rem;
+      display: flex; align-items: center; gap: 10px;
+    }
+    nav .logo svg { width: 28px; height: 28px; }
+    nav .logo span { background: linear-gradient(135deg, var(--accent), var(--cyan)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    nav .links { display: flex; gap: 1.5rem; align-items: center; }
+    nav .links a {
+      color: var(--text2); text-decoration: none; font-size: 0.875rem;
+      font-weight: 500; transition: color .2s;
+    }
+    nav .links a:hover { color: var(--text); }
+    nav .links .btn {
+      background: var(--accent); color: #fff; padding: 8px 20px;
+      border-radius: 8px; font-weight: 600; font-size: 0.85rem;
+      transition: background .2s, transform .15s;
+    }
+    nav .links .btn:hover { background: var(--accent2); transform: translateY(-1px); }
+
+    /* ── Containers ─────────────────────────────────────────────── */
+    section { position: relative; z-index: 1; padding: 5rem 2rem; }
+    .container { max-width: 1100px; margin: 0 auto; }
+
+    /* ── Hero ───────────────────────────────────────────────────── */
+    .hero {
+      min-height: 100vh; display: flex; align-items: center;
+      padding-top: 80px; text-align: center;
+    }
+    .hero h1 {
+      font-size: clamp(2.8rem, 7vw, 5rem); font-weight: 800;
+      line-height: 1.1; margin-bottom: 1.2rem;
+    }
+    .hero h1 .grad {
+      background: linear-gradient(135deg, var(--accent) 0%, var(--cyan) 50%, var(--green) 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .hero p {
+      font-size: 1.2rem; color: var(--text2); max-width: 680px;
+      margin: 0 auto 2.2rem; line-height: 1.7;
+    }
+    .hero .actions { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+    .hero .actions .btn-primary {
+      background: var(--accent); color: #fff; padding: 14px 36px;
+      border-radius: 10px; font-weight: 600; font-size: 1rem;
+      text-decoration: none; transition: background .2s, transform .15s;
+      display: inline-flex; align-items: center; gap: 8px;
+    }
+    .hero .actions .btn-primary:hover { background: var(--accent2); transform: translateY(-2px); }
+    .hero .actions .btn-ghost {
+      background: transparent; color: var(--text); padding: 14px 36px;
+      border-radius: 10px; font-weight: 600; font-size: 1rem;
+      text-decoration: none; border: 1px solid var(--border);
+      transition: background .2s, border-color .2s;
+      display: inline-flex; align-items: center; gap: 8px;
+    }
+    .hero .actions .btn-ghost:hover { background: var(--bg3); border-color: var(--text2); }
+    .hero .badges {
+      display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap;
+      margin-top: 2.5rem;
+    }
+    .hero .badges span {
+      background: var(--bg3); border: 1px solid var(--border);
+      padding: 6px 16px; border-radius: 20px; font-size: 0.8rem;
+      color: var(--text2); font-weight: 500;
+    }
+
+    /* ── Terminal output ────────────────────────────────────────── */
+    .terminal-block {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: var(--radius); overflow: hidden;
+      margin: 3rem auto 0; max-width: 780px; text-align: left;
+    }
+    .terminal-block .bar {
+      background: var(--bg3); padding: 10px 16px;
+      display: flex; align-items: center; gap: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .terminal-block .bar .dot {
+      width: 10px; height: 10px; border-radius: 50%;
+    }
+    .terminal-block .bar .dot.r { background: #ff5f57; }
+    .terminal-block .bar .dot.y { background: #ffbd2e; }
+    .terminal-block .bar .dot.g { background: #28c840; }
+    .terminal-block .bar .title { font-size: 0.8rem; color: var(--text2); margin-left: 12px; }
+    .terminal-block .body {
+      padding: 1.2rem 1.5rem; font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 0.85rem; line-height: 1.7; overflow-x: auto;
+    }
+    .terminal-block .body .prompt { color: var(--green); }
+    .terminal-block .body .resp { color: var(--text2); }
+    .terminal-block .body .tool { color: var(--accent); }
+    .terminal-block .body .dim { color: #555b77; }
+
+    /* ── Section headers ────────────────────────────────────────── */
+    .section-label {
+      font-size: 0.8rem; font-weight: 600; letter-spacing: 2px;
+      text-transform: uppercase; color: var(--accent); margin-bottom: 0.6rem;
+    }
+    .section-title {
+      font-size: clamp(1.8rem, 3.5vw, 2.6rem); font-weight: 700;
+      margin-bottom: 0.8rem;
+    }
+    .section-sub {
+      color: var(--text2); font-size: 1.05rem; max-width: 640px;
+      margin-bottom: 3rem;
+    }
+
+    /* ── Feature grid ───────────────────────────────────────────── */
+    .feat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 1.25rem;
+    }
+    .feat-card {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1.6rem;
+      transition: border-color .2s, transform .15s, box-shadow .2s;
+    }
+    .feat-card:hover {
+      border-color: var(--accent); transform: translateY(-2px);
+      box-shadow: 0 8px 32px rgba(124,92,252,0.08);
+    }
+    .feat-card .icon {
+      width: 40px; height: 40px; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.2rem; margin-bottom: 1rem;
+    }
+    .feat-card h3 { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem; }
+    .feat-card p { font-size: 0.88rem; color: var(--text2); line-height: 1.6; }
+
+    /* ── Architecture diagram ───────────────────────────────────── */
+    .arch { margin: 3rem 0; }
+    .arch-row {
+      display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+      flex-wrap: wrap; margin-bottom: 0.6rem;
+    }
+    .arch-box {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 0.7rem 1.2rem;
+      font-size: 0.8rem; font-weight: 500; text-align: center;
+      transition: border-color .2s;
+    }
+    .arch-box:hover { border-color: var(--accent); }
+    .arch-box.accent { border-color: var(--accent); background: rgba(124,92,252,0.08); }
+    .arch-box.cyan { border-color: var(--cyan); background: rgba(90,200,250,0.08); }
+    .arch-box.green { border-color: var(--green); background: rgba(61,214,140,0.08); }
+    .arch-box.yellow { border-color: var(--yellow); background: rgba(255,214,10,0.08); }
+    .arch-box.pink { border-color: var(--pink); background: rgba(255,107,157,0.08); }
+    .arch-box.orange { border-color: var(--orange); background: rgba(255,159,67,0.08); }
+    .arch-arrow { color: var(--text2); font-size: 1.2rem; }
+
+    /* ── Tool categories ────────────────────────────────────────── */
+    .tool-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+      gap: 0.75rem;
+    }
+    .tool-chip {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 0.65rem 1rem;
+      font-size: 0.82rem; font-weight: 500;
+      display: flex; align-items: center; gap: 8px;
+      transition: border-color .2s, background .2s;
+    }
+    .tool-chip:hover { border-color: var(--accent); background: var(--bg3); }
+    .tool-chip .dot {
+      width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+    }
+
+    /* ── Webhook simulation ─────────────────────────────────────── */
+    #webhook-demo {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: var(--radius); overflow: hidden; margin-top: 2rem;
+    }
+    #webhook-demo .wh-bar {
+      background: var(--bg3); padding: 12px 18px;
+      display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+    }
+    #webhook-demo .wh-bar .wh-label {
+      font-size: 0.82rem; font-weight: 600;
+      display: flex; align-items: center; gap: 8px;
+    }
+    #webhook-demo .wh-bar .wh-label .live {
+      background: var(--green); width: 8px; height: 8px;
+      border-radius: 50%; display: inline-block;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    #webhook-demo .wh-bar .wh-actions button {
+      background: transparent; border: 1px solid var(--border);
+      color: var(--text2); padding: 6px 16px; border-radius: 6px;
+      cursor: pointer; font-size: 0.78rem; font-weight: 500;
+      transition: all .2s;
+    }
+    #webhook-demo .wh-bar .wh-actions button:hover {
+      background: var(--accent); border-color: var(--accent); color: #fff;
+    }
+    #webhook-demo .wh-body {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 0;
+    }
+    #webhook-demo .wh-body .wh-events {
+      padding: 1rem; max-height: 340px; overflow-y: auto;
+      border-right: 1px solid var(--border);
+      font-family: 'JetBrains Mono', monospace; font-size: 0.78rem;
+    }
+    #webhook-demo .wh-body .wh-events .evt {
+      padding: 6px 0; border-bottom: 1px solid rgba(38,47,74,0.4);
+      display: flex; gap: 8px; align-items: flex-start;
+    }
+    #webhook-demo .wh-body .wh-events .evt .tag {
+      font-size: 0.65rem; font-weight: 600; padding: 2px 8px;
+      border-radius: 4px; white-space: nowrap; flex-shrink: 0;
+    }
+    #webhook-demo .wh-body .wh-events .evt .tag.in { background: rgba(61,214,140,0.15); color: var(--green); }
+    #webhook-demo .wh-body .wh-events .evt .tag.out { background: rgba(124,92,252,0.15); color: var(--accent); }
+    #webhook-demo .wh-body .wh-events .evt .tag.sys { background: rgba(90,200,250,0.15); color: var(--cyan); }
+    #webhook-demo .wh-body .wh-events .evt .tag.act { background: rgba(255,159,67,0.15); color: var(--orange); }
+    #webhook-demo .wh-body .wh-events .evt .msg { color: var(--text2); word-break: break-word; }
+    #webhook-demo .wh-body .wh-preview {
+      padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem;
+    }
+    #webhook-demo .wh-body .wh-preview .wh-stat {
+      background: var(--bg3); border: 1px solid var(--border);
+      border-radius: 8px; padding: 0.8rem 1rem;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    #webhook-demo .wh-body .wh-preview .wh-stat .lbl {
+      font-size: 0.78rem; color: var(--text2);
+    }
+    #webhook-demo .wh-body .wh-preview .wh-stat .val {
+      font-size: 1.2rem; font-weight: 700;
+    }
+    #webhook-demo .wh-body .wh-preview .wh-chart {
+      background: var(--bg3); border: 1px solid var(--border);
+      border-radius: 8px; padding: 1rem; flex: 1;
+      display: flex; align-items: flex-end; gap: 6px;
+    }
+    #webhook-demo .wh-body .wh-preview .wh-chart .bar {
+      flex: 1; border-radius: 4px 4px 0 0;
+      background: linear-gradient(to top, var(--accent), var(--cyan));
+      transition: height .5s ease;
+      min-height: 4px;
+    }
+
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+    /* ── Config / stats ─────────────────────────────────────────── */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 1rem; margin-top: 2rem;
+    }
+    .stat-box {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1.4rem; text-align: center;
+    }
+    .stat-box .num {
+      font-size: 1.8rem; font-weight: 700;
+      background: linear-gradient(135deg, var(--accent), var(--cyan));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .stat-box .lbl { font-size: 0.82rem; color: var(--text2); margin-top: 0.3rem; }
+
+    /* ── Webhook table (events) ─────────────────────────────────── */
+    .webhook-table {
+      width: 100%; border-collapse: collapse; margin-top: 1.5rem;
+      font-size: 0.85rem;
+    }
+    .webhook-table th {
+      text-align: left; padding: 0.7rem 1rem;
+      background: var(--bg3); color: var(--text2); font-weight: 600;
+      border-bottom: 1px solid var(--border);
+    }
+    .webhook-table td {
+      padding: 0.7rem 1rem; border-bottom: 1px solid var(--border);
+      color: var(--text);
+    }
+    .webhook-table tr:hover td { background: var(--bg3); }
+
+    /* ── Footer ─────────────────────────────────────────────────── */
+    footer {
+      text-align: center; padding: 3rem 2rem;
+      border-top: 1px solid var(--border);
+      color: var(--text2); font-size: 0.85rem;
+    }
+    footer a { color: var(--accent); text-decoration: none; }
+
+    /* ── Responsive ─────────────────────────────────────────────── */
+    @media (max-width: 720px) {
+      nav .links a:not(.btn) { display: none; }
+      .feat-grid { grid-template-columns: 1fr; }
+      .tool-grid { grid-template-columns: 1fr 1fr; }
+      #webhook-demo .wh-body { grid-template-columns: 1fr; }
+      #webhook-demo .wh-body .wh-events { border-right: none; border-bottom: 1px solid var(--border); }
+      section { padding: 3rem 1.25rem; }
+    }
+    @media (max-width: 480px) {
+      .tool-grid { grid-template-columns: 1fr; }
+    }
+
+    /* ── Scrollbar ──────────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text2); }
+
+    /* ── Fade-in on scroll ──────────────────────────────────────── */
+    .fade-in {
+      opacity: 0; transform: translateY(24px);
+      transition: opacity .6s ease, transform .6s ease;
+    }
+    .fade-in.visible { opacity: 1; transform: translateY(0); }
+  </style>
+</head>
+<body>
+
+<canvas id="particles"></canvas>
+
+<!-- ─── Navigation ──────────────────────────────────────────── -->
+<nav>
+  <div class="logo">
+    <svg viewBox="0 0 28 28" fill="none"><circle cx="14" cy="14" r="12" stroke="url(#ng)" stroke-width="2"/><path d="M10 10l8 8M18 10l-8 8" stroke="url(#ng)" stroke-width="2" stroke-linecap="round"/><defs><linearGradient id="ng" x1="0" y1="0" x2="28" y2="28"><stop stop-color="#7c5cfc"/><stop offset="1" stop-color="#5ac8fa"/></linearGradient></defs></svg>
+    <span>Nexus Agent</span>
+  </div>
+  <div class="links">
+    <a href="#features">Features</a>
+    <a href="#tools">Tools</a>
+    <a href="#architecture">Architecture</a>
+    <a href="#webhooks">Webhooks</a>
+    <a class="btn" href="https://nobletimefashion-pixel.github.io/AgenticSystem/" target="_blank">Launch Web App</a>
+  </div>
+</nav>
+
+<!-- ─── Hero ─────────────────────────────────────────────────── -->
+<section class="hero">
+  <div class="container">
+    <h1>
+      AI Coding Agent<br>
+      <span class="grad">for the Terminal</span>
+    </h1>
+    <p>
+      An intelligent, autonomous coding assistant that reads, writes, searches, and executes
+      code directly from your terminal — powered by LLMs with 30+ built-in tools.
+    </p>
+    <div class="actions">
+      <a class="btn-primary" href="https://nobletimefashion-pixel.github.io/AgenticSystem/" target="_blank">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 10h-1.5A5.5 5.5 0 0 0 11 4H7a4 4 0 0 0-4 4v1a5 5 0 0 0 5 5h1"/><path d="M6 14l4 4 4-4"/><path d="M12 18V4"/></svg>
+        Try in Browser
+      </a>
+      <a class="btn-ghost" href="#install">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-3-3m3 3 3-3"/><path d="M5 21h14"/></svg>
+        Install Locally
+      </a>
+      <a class="btn-ghost" href="#webhooks">Webhook Demo</a>
+    </div>
+    <div class="badges">
+      <span>30+ Tools</span>
+      <span>MCP Support</span>
+      <span>RAG Mode</span>
+      <span>OSINT Suite</span>
+      <span>Web UI</span>
+      <a href="https://nobletimefashion-pixel.github.io/AgenticSystem/" target="_blank" style="background:var(--accent);border:1px solid var(--accent);padding:6px 16px;border-radius:20px;font-size:0.8rem;color:#fff;font-weight:500;text-decoration:none;transition:background .2s" onmouseover="this.style.background='var(--accent2)'" onmouseout="this.style.background='var(--accent)'">🚀 Live Demo</a>
+    </div>
+
+    <!-- Terminal preview -->
+    <div class="terminal-block fade-in">
+      <div class="bar">
+        <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span class="title">nexus — interactive</span>
+      </div>
+      <div class="body">
+        <div><span class="prompt">$</span> <span class="tool">nexus</span> "find all TODOs and refactor the auth module"</div>
+        <div><span class="dim">┌─ [agent]</span></div>
+        <div><span class="dim">│ ●</span> <span class="tool">grep</span> <span class="resp">‣ searching for TODO patterns...</span></div>
+        <div><span class="dim">│ ●</span> <span class="tool">read_file</span> <span class="resp">‣ auth/module.py</span></div>
+        <div><span class="dim">│ ●</span> <span class="tool">edit</span> <span class="resp">‣ 3 files modified</span></div>
+        <div><span class="dim">│ ●</span> <span class="tool">shell</span> <span class="resp">‣ pytest — 42 passed</span></div>
+        <div><span class="dim">└─ ✓ Done — 6 TODOs resolved, auth module refactored</span></div>
+        <div style="margin-top: 6px;"><span class="prompt">$</span> <span class="resp" style="animation: blink 1s step-end infinite;">▎</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── Features ─────────────────────────────────────────────── -->
+<section id="features">
+  <div class="container">
+    <div class="section-label fade-in">Capabilities</div>
+    <h2 class="section-title fade-in">Everything a coding agent needs</h2>
+    <p class="section-sub fade-in">From file operations to OSINT investigations — Nexus Agent ships with a comprehensive tool ecosystem designed for real-world software engineering.</p>
+
+    <div class="feat-grid">
+      <div class="feat-card fade-in">
+        <div class="icon" style="background:rgba(124,92,252,0.12);color:var(--accent)">📁</div>
+        <h3>File Operations</h3>
+        <p>Read, write, and edit files with surgical precision. Supports diff-based editing, batch operations, and syntax-aware display.</p>
+      </div>
+      <div class="feat-card fade-in">
+        <div class="icon" style="background:rgba(90,200,250,0.12);color:var(--cyan)">🔍</div>
+        <h3>Code Search & Discovery</h3>
+        <p>grep, glob, and list_dir tools for rapid codebase exploration. Find patterns, navigate directories, and understand project structure.</p>
+      </div>
+      <div class="feat-card fade-in">
+        <div class="icon" style="background:rgba(61,214,140,0.12);color:var(--green)">⚡</div>
+        <h3>Shell Execution</h3>
+        <p>Run commands, tests, and builds directly. Built-in safety policies with dangerous command detection and approval workflows.</p>
+      </div>
+      <div class="feat-card fade-in">
+        <div class="icon" style="background:rgba(255,214,10,0.12);color:var(--yellow)">🌐</div>
+        <h3>Web & Network</h3>
+        <p>Web search, web fetch, URL scraping, and browser automation. Gather information from the web programmatically.</p>
+      </div>
+      <div class="feat-card fade-in">
+        <div class="icon" style="background:rgba(255,107,157,0.12);color:var(--pink)">🛡️</div>
+        <h3>OSINT Investigation</h3>
+        <p>Domain, email, IP, phone, username, WHOIS, Censys, Shodan, and social media intelligence gathering tools.</p>
+      </div>
+      <div class="feat-card fade-in">
+        <div class="icon" style="background:rgba(255,159,67,0.12);color:var(--orange)">📄</div>
+        <h3>RAG — PDF Querying</h3>
+        <p>Ingest PDF documents and query them using vector search. Ask natural language questions about your document collection.</p>
+      </div>
+      <div class="feat-card fade-in">
+        <div class="icon" style="background:rgba(124,92,252,0.12);color:var(--accent)">🔗</div>
+        <h3>MCP Integration</h3>
+        <p>Model Context Protocol support — connect external MCP servers via stdio or SSE. Extend the agent with custom tools dynamically.</p>
+      </div>
+      <div class="feat-card fade-in">
+        <div class="icon" style="background:rgba(90,200,250,0.12);color:var(--cyan)">🧩</div>
+        <h3>Sub-Agents</h3>
+        <p>Spawn focused child agents for codebase investigation and code review. Each runs with isolated context and limited tool access.</p>
+      </div>
+      <div class="feat-card fade-in">
+        <div class="icon" style="background:rgba(61,214,140,0.12);color:var(--green)">🔐</div>
+        <h3>Safety & Approval</h3>
+        <p>6 approval policies (on-request, auto, never, yolo, etc.). Regex-based dangerous/safe command detection. Path traversal protection.</p>
+      </div>
+      <div class="feat-card fade-in">
+        <div class="icon" style="background:rgba(255,214,10,0.12);color:var(--yellow)">🪝</div>
+        <h3>Hook System</h3>
+        <p>Trigger external scripts at 5 lifecycle events: before/after agent, before/after tool, on error. Context passed via environment variables.</p>
+      </div>
+      <div class="feat-card fade-in">
+        <div class="icon" style="background:rgba(255,107,157,0.12);color:var(--pink)">🧠</div>
+        <h3>Context Management</h3>
+        <p>Smart context compression at 80% token threshold. LLM-summarized conversation history, tool output pruning, loop detection.</p>
+      </div>
+      <div class="feat-card fade-in">
+        <div class="icon" style="background:rgba(255,159,67,0.12);color:var(--orange)">🖥️</div>
+        <h3>Dual UI — TUI + Web</h3>
+        <p>Rich terminal TUI with semantic theming, plus a FastAPI + WebSocket web UI with a dark-themed SPA. Same agent, two interfaces.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── Stats ────────────────────────────────────────────────── -->
+<section>
+  <div class="container">
+    <div class="section-label fade-in">By the numbers</div>
+    <div class="stats-row">
+      <div class="stat-box fade-in"><div class="num">30+</div><div class="lbl">Built-in Tools</div></div>
+      <div class="stat-box fade-in"><div class="num">6</div><div class="lbl">Approval Policies</div></div>
+      <div class="stat-box fade-in"><div class="num">5</div><div class="lbl">Hook Triggers</div></div>
+      <div class="stat-box fade-in"><div class="num">2</div><div class="lbl">UI Modes (TUI + Web)</div></div>
+      <div class="stat-box fade-in"><div class="num">256K</div><div class="lbl">Context Window</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── Tools ────────────────────────────────────────────────── -->
+<section id="tools">
+  <div class="container">
+    <div class="section-label fade-in">Tool Ecosystem</div>
+    <h2 class="section-title fade-in">30+ integrated tools</h2>
+    <p class="section-sub fade-in">Every tool is a first-class Pydantic-validated module with JSON schema generation, automatic parameter validation, and safety checks.</p>
+
+    <div style="margin-bottom: 2rem;">
+      <h3 style="font-size:1rem;font-weight:600;margin-bottom:0.8rem;color:var(--accent)">📂 File Operations</h3>
+      <div class="tool-grid">
+        <div class="tool-chip fade-in"><span class="dot" style="background:var(--cyan)"></span>read_file</div>
+        <div class="tool-chip fade-in"><span class="dot" style="background:var(--yellow)"></span>write_file</div>
+        <div class="tool-chip fade-in"><span class="dot" style="background:var(--yellow)"></span>edit</div>
+        <div class="tool-chip fade-in"><span class="dot" style="background:var(--cyan)"></span>list_dir</div>
+        <div class="tool-chip fade-in"><span class="dot" style="background:var(--cyan)"></span>glob</div>
+        <div class="tool-chip fade-in"><span class="dot" style="background:var(--cyan)"></span>grep</div>
+      </div>
+    </div>
+
+    <div style="margin-bottom: 2rem;">
+      <h3 style="font-size:1rem;font-weight:600;margin-bottom:0.8rem;color:var(--green)">⚡ Execution & Dev</h3>
+      <div class="tool-grid">
+        <div class="tool-chip fade-in"><span class="dot" style="background:var(--green)"></span>shell</div>
+        <div class="tool-chip fade-in"><span class="dot" style="background:var(--green)"></span>git</div>
+        <div class="tool-chip fade-in"><span class="dot" style="background:var(--green)"></span>todos</div>
+        <div class="tool-chip fade-in"><span class="dot" style="background:var(--green)"></span>memory</div>
+        <div class="tool-chip fade-in"><span class="dot" style="background:var(--green)"></span>software_architect</div>
+        <div class="tool-chip fade-in"><span class="dot" style="background:var(--green)"></span>report_generator</div>
+      </div>
+    </div>
+
+    <div style="margin-bottom: 2rem;">
+      <h3 style="font-size:1rem;font-weight:600;margin-bottom:0.8rem;color:var(--cyan)">🌐 Web & Network</h3>
+      <div class="tool-grid">
+        <div class="tool-chip fade-in"><span class="dot" style="background:var(--cyan)"></span>web_search</div>
+        <div class="tool-chip fade-in"><span class="dot" style="background:var(--cyan)"></span>web_fetch</div>
+        <div class="tool-chip fade-in"><span class="dot" style="background:var(--cyan)"></span>url_scrape</div>
+        <div class="tool-chip fade-in"><span class="dot" style="background:var(--cyan)"></span>browser</div>
+      </div>
+    </div>
+
+    <div style="margin-bottom: 2rem;">
+      <h3 style="font-size:1rem;font-weight:600;margin-bottom:0.8rem;color:var(--orange)">🛡️ OSINT & Security</h3>
+      <div class="tool-grid">
+        <div class="tool-chip fade-in"><span class="dot" style="background:var(--orange)"></span>domain_osint</div>
+        <div class="tool-chip fade-in"><span class="dot" style="background:var(--orange)"></span>email_osint</div>
+        <div class="tool-chip fade-in"><span class="dot" style="background:var(--orange)"></span>ip_osint</div>
+        <div class="tool-chip fade-in"><span class="dot" style="background:var(--orange)"></span>phone_osint</div>
+        <div class="tool-chip fade-in"><span class="dot" style="background:var(--orange)"></span>username_osint</div>
+        <div class="tool-chip fade-in"><span class="dot" style="background:var(--orange)"></span>whois_osint</div>
+        <div class="tool-chip fade-in"><span class="dot" style="background:var(--orange)"></span>censys_osint</div>
+        <div class="tool-chip fade-in"><span class="dot" style="background:var(--orange)"></span>shodan_osint</div>
+        <div class="tool-chip fade-in"><span class="dot" style="background:var(--orange)"></span>social_media</div>
+        <div class="tool-chip fade-in"><span class="dot" style="background:var(--orange)"></span>paste_osint</div>
+        <div class="tool-chip fade-in"><span class="dot" style="background:var(--orange)"></span>web_security_audit</div>
+        <div class="tool-chip fade-in"><span class="dot" style="background:var(--orange)"></span>os_security_monitor</div>
+      </div>
+    </div>
+
+    <div>
+      <h3 style="font-size:1rem;font-weight:600;margin-bottom:0.8rem;color:var(--pink)">📄 Media & Documents</h3>
+      <div class="tool-grid">
+        <div class="tool-chip fade-in"><span class="dot" style="background:var(--pink)"></span>rag</div>
+        <div class="tool-chip fade-in"><span class="dot" style="background:var(--pink)"></span>video_generate</div>
+        <div class="tool-chip fade-in"><span class="dot" style="background:var(--pink)"></span>report_generator</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── Architecture ─────────────────────────────────────────── -->
+<section id="architecture">
+  <div class="container">
+    <div class="section-label fade-in">Architecture</div>
+    <h2 class="section-title fade-in">Event-driven agentic loop</h2>
+    <p class="section-sub fade-in">The entire system is built around an async generator pipeline — user input flows through the agent, LLM, tools, and events stream back to the UI.</p>
+
+    <div class="arch fade-in">
+      <div class="arch-row">
+        <div class="arch-box accent">User Input</div>
+        <span class="arch-arrow">→</span>
+        <div class="arch-box">CLI / WebSocket</div>
+        <span class="arch-arrow">→</span>
+        <div class="arch-box cyan">Agent (Orchestrator)</div>
+      </div>
+      <div class="arch-row">
+        <span class="arch-arrow" style="visibility:hidden">→</span>
+        <div class="arch-box green">Session</div>
+        <span class="arch-arrow">→</span>
+        <div class="arch-box">LLM Client</div>
+        <span class="arch-arrow">→</span>
+        <div class="arch-box yellow">Tool Registry</div>
+      </div>
+      <div class="arch-row">
+        <span class="arch-arrow" style="visibility:hidden">→</span>
+        <span class="arch-arrow" style="visibility:hidden">→</span>
+        <div class="arch-box pink">Context Manager</div>
+        <span class="arch-arrow" style="visibility:hidden">→</span>
+        <div class="arch-box orange">Hook System</div>
+      </div>
+      <div class="arch-row" style="margin-top:0.6rem">
+        <div class="arch-box" style="border-color:var(--green);font-size:0.75rem">AgentEvent stream</div>
+        <span class="arch-arrow">→</span>
+        <div class="arch-box" style="border-color:var(--accent);font-size:0.75rem">Rich TUI</div>
+        <span class="arch-arrow">↔</span>
+        <div class="arch-box" style="border-color:var(--cyan);font-size:0.75rem">Web UI (FastAPI + WS)</div>
+      </div>
+    </div>
+
+    <div class="feat-grid" style="margin-top:2rem">
+      <div class="feat-card fade-in">
+        <div class="icon" style="background:rgba(90,200,250,0.12);color:var(--cyan)">🔄</div>
+        <h3>Agentic Loop</h3>
+        <p>Streaming LLM responses → parallel tool execution → context compression → loop detection. Configurable max turns and retry logic.</p>
+      </div>
+      <div class="feat-card fade-in">
+        <div class="icon" style="background:rgba(61,214,140,0.12);color:var(--green)">📦</div>
+        <h3>Context Window</h3>
+        <p>256K token context with proactive compression at 80% threshold. LLM-summarized history with structured sections.</p>
+      </div>
+      <div class="feat-card fade-in">
+        <div class="icon" style="background:rgba(255,214,10,0.12);color:var(--yellow)">🔄</div>
+        <h3>Loop Detection</h3>
+        <p>Signature-based cycle detection (20-entry deque). Identifies exact repeats and A-B-A-B patterns, injects loop-breaker prompts.</p>
+      </div>
+      <div class="feat-card fade-in">
+        <div class="icon" style="background:rgba(124,92,252,0.12);color:var(--accent)">📐</div>
+        <h3>Pydantic Validation</h3>
+        <p>Every tool uses Pydantic BaseModel for parameter schemas. Automatic JSON schema → OpenAI function-calling format.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── Webhooks ─────────────────────────────────────────────── -->
+<section id="webhooks">
+  <div class="container">
+    <div class="section-label fade-in">Webhook System</div>
+    <h2 class="section-title fade-in">Lifecycle event hooks</h2>
+    <p class="section-sub fade-in">
+      Nexus Agent fires webhook-style events at every stage of the agent lifecycle —
+      before/after the agent runs, before/after every tool call, and on error.
+      External scripts receive context via environment variables.
+    </p>
+
+    <div id="webhook-demo" class="fade-in">
+      <div class="wh-bar">
+        <div class="wh-label">
+          <span class="live"></span>
+          Agent Event Stream
+          <span style="font-weight:400;color:var(--text2);font-size:0.75rem;margin-left:8px">— live simulation</span>
+        </div>
+        <div class="wh-actions">
+          <button onclick="simulateWebhook()">▶ Simulate</button>
+          <button onclick="clearEvents()">Clear</button>
+        </div>
+      </div>
+      <div class="wh-body">
+        <div class="wh-events" id="whEvents">
+          <div class="evt">
+            <span class="tag sys">SYS</span>
+            <span class="msg">Nexus Agent webhook monitor ready</span>
+          </div>
+          <div class="evt">
+            <span class="tag sys">SYS</span>
+            <span class="msg">Listening for agent lifecycle events...</span>
+          </div>
+        </div>
+        <div class="wh-preview">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem">
+            <div class="wh-stat">
+              <span class="lbl">Events Captured</span>
+              <span class="val" id="evtCount" style="color:var(--cyan)">0</span>
+            </div>
+            <div class="wh-stat">
+              <span class="lbl">Tools Invoked</span>
+              <span class="val" id="toolCount" style="color:var(--accent)">0</span>
+            </div>
+          </div>
+          <div class="wh-stat">
+            <span class="lbl">Last Hook Trigger</span>
+            <span class="val" id="lastTrigger" style="font-size:0.85rem;font-weight:500;color:var(--text2)">—</span>
+          </div>
+          <div class="wh-chart" id="whChart">
+            <div class="bar" style="height:10%"></div>
+            <div class="bar" style="height:25%"></div>
+            <div class="bar" style="height:60%"></div>
+            <div class="bar" style="height:40%"></div>
+            <div class="bar" style="height:85%"></div>
+            <div class="bar" style="height:30%"></div>
+            <div class="bar" style="height:70%"></div>
+            <div class="bar" style="height:50%"></div>
+            <div class="bar" style="height:90%"></div>
+            <div class="bar" style="height:45%"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h3 style="margin-top:2.5rem;font-size:1.1rem;font-weight:600;margin-bottom:1rem">Hook Event Reference</h3>
+    <div style="overflow-x:auto">
+      <table class="webhook-table fade-in">
+        <thead>
+          <tr>
+            <th>Trigger</th>
+            <th>Timing</th>
+            <th>Env Variables Set</th>
+            <th>Use Case</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="color:var(--cyan)">before_agent</td>
+            <td>Before agent processes user message</td>
+            <td><code style="font-size:0.78rem;color:var(--text2)">NEXUS_AGENT_TRIGGER</code>, <code style="font-size:0.78rem;color:var(--text2)">NEXUS_AGENT_USER_MESSAGE</code></td>
+            <td>Logging, telemetry, rate limiting</td>
+          </tr>
+          <tr>
+            <td style="color:var(--green)">after_agent</td>
+            <td>After agent completes response</td>
+            <td><code style="font-size:0.78rem;color:var(--text2)">NEXUS_AGENT_TRIGGER</code>, <code style="font-size:0.78rem;color:var(--text2)">NEXUS_AGENT_RESPONSE</code></td>
+            <td>Notifications, audit logs, CI triggers</td>
+          </tr>
+          <tr>
+            <td style="color:var(--yellow)">before_tool</td>
+            <td>Before each tool execution</td>
+            <td><code style="font-size:0.78rem;color:var(--text2)">NEXUS_AGENT_TOOL_NAME</code>, <code style="font-size:0.78rem;color:var(--text2)">NEXUS_AGENT_TOOL_PARAMS</code></td>
+            <td>Approval gating, pre-flight checks</td>
+          </tr>
+          <tr>
+            <td style="color:var(--orange)">after_tool</td>
+            <td>After each tool completes</td>
+            <td><code style="font-size:0.78rem;color:var(--text2)">NEXUS_AGENT_TOOL_RESULT</code>, <code style="font-size:0.78rem;color:var(--text2)">NEXUS_AGENT_TOOL_NAME</code></td>
+            <td>Result caching, metrics, alerting</td>
+          </tr>
+          <tr>
+            <td style="color:var(--red)">on_error</td>
+            <td>On agent or tool exception</td>
+            <td><code style="font-size:0.78rem;color:var(--text2)">NEXUS_AGENT_ERROR</code></td>
+            <td>Error reporting, fallback actions</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ─── Configuration ────────────────────────────────────────── -->
+<section>
+  <div class="container">
+    <div class="section-label fade-in">Configuration</div>
+    <h2 class="section-title fade-in">Flexible & hierarchical</h2>
+    <p class="section-sub fade-in">Config loads from three levels — system-wide, project-level, and Agent.md — merged with a deep-merge strategy. Secrets come from environment variables.</p>
+
+    <div class="terminal-block fade-in" style="max-width:100%">
+      <div class="bar">
+        <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span class="title">~/.config/nexus-agent/config.toml</span>
+      </div>
+      <div class="body" style="font-size:0.8rem">
+        <span style="color:#555b77"># Nexus Agent Configuration</span><br>
+        <br>
+        <span style="color:var(--cyan)">[model]</span><br>
+        name = <span style="color:var(--green)">"nvidia/nemotron-3-super-120b-a12b:free"</span><br>
+        temperature = <span style="color:var(--orange)">1.0</span><br>
+        context_window = <span style="color:var(--orange)">256_000</span><br>
+        <br>
+        <span style="color:var(--cyan)">[shell_environment]</span><br>
+        exclude_patterns = [<span style="color:var(--green)">"*KEY*"</span>, <span style="color:var(--green)">"*TOKEN*"</span>, <span style="color:var(--green)">"*API*"</span>, <span style="color:var(--green)">"*SECRET*"</span>]<br>
+        <br>
+        approval = <span style="color:var(--green)">"on-request"</span><br>
+        max_turns = <span style="color:var(--orange)">100</span><br>
+        <br>
+        <span style="color:var(--cyan)">[mcp_server.mytools]</span><br>
+        command = <span style="color:var(--green)">"node"</span><br>
+        args = [<span style="color:var(--green)">"server.js"</span>]<br>
+        <br>
+        <span style="color:var(--cyan)">[[hooks]]</span><br>
+        name = <span style="color:var(--green)">"notify"</span><br>
+        trigger = <span style="color:var(--green)">"after_agent"</span><br>
+        command = <span style="color:var(--green)">"python3 notify.py"</span><br>
+        timeout_sec = <span style="color:var(--orange)">30</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── Install & Deploy ───────────────────────────────────────── -->
+<section id="install">
+  <div class="container">
+    <div class="section-label fade-in">Get Started</div>
+    <h2 class="section-title fade-in">Use locally or in the browser</h2>
+    <p class="section-sub fade-in">Nexus Agent runs entirely in your terminal, or access the full web UI from any browser — no installation required.</p>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-bottom:2rem">
+      <div class="feat-card fade-in" style="padding:2rem">
+        <div class="icon" style="background:rgba(61,214,140,0.12);color:var(--green);width:48px;height:48px;font-size:1.5rem;margin-bottom:1.2rem">💻</div>
+        <h3 style="font-size:1.2rem;margin-bottom:0.3rem">Local Install</h3>
+        <p style="font-size:0.85rem;color:var(--text2);margin-bottom:1.2rem">Run from your terminal with full tool access to your filesystem.</p>
+        <div class="terminal-block" style="margin:0">
+          <div class="bar">
+            <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+            <span class="title">install.sh</span>
+          </div>
+          <div class="body" style="font-size:0.78rem;padding:0.9rem 1.2rem">
+            <div><span style="color:var(--cyan)"># One-line install</span></div>
+            <div><span class="prompt">$</span> curl -fsSL https://raw.githubusercontent.com/<br>nobletimefashion-pixel/Agentic-AI-/main/install.sh | bash</div>
+            <div style="margin-top:6px;color:var(--text2)">── or ──</div>
+            <div style="margin-top:6px"><span class="prompt">$</span> git clone https://github.com/<br>nobletimefashion-pixel/Agentic-AI-.git</div>
+            <div><span class="prompt">$</span> <span style="color:var(--accent)">cd</span> Agentic-AI- && uv venv && source .venv/bin/activate</div>
+            <div><span class="prompt">$</span> uv pip install -e .</div>
+            <div><span class="prompt">$</span> <span class="tool">nexus</span></div>
+          </div>
+        </div>
+        <div style="margin-top:1rem;display:flex;flex-wrap:wrap;gap:0.5rem">
+          <span style="background:var(--bg3);border:1px solid var(--border);padding:4px 12px;border-radius:6px;font-size:0.75rem;color:var(--text2)">nexus — interactive</span>
+          <span style="background:var(--bg3);border:1px solid var(--border);padding:4px 12px;border-radius:6px;font-size:0.75rem;color:var(--text2)">nexus "prompt"</span>
+          <span style="background:var(--bg3);border:1px solid var(--border);padding:4px 12px;border-radius:6px;font-size:0.75rem;color:var(--text2)">nexus --rag ./pdfs</span>
+          <span style="background:var(--bg3);border:1px solid var(--border);padding:4px 12px;border-radius:6px;font-size:0.75rem;color:var(--text2)">nexus --ui</span>
+        </div>
+      </div>
+
+      <div class="feat-card fade-in" style="padding:2rem">
+        <div class="icon" style="background:rgba(90,200,250,0.12);color:var(--cyan);width:48px;height:48px;font-size:1.5rem;margin-bottom:1.2rem">🌐</div>
+        <h3 style="font-size:1.2rem;margin-bottom:0.3rem">Browser (Deployed)</h3>
+        <p style="font-size:0.85rem;color:var(--text2);margin-bottom:1.2rem">Access the full web UI instantly — no setup, no downloads.</p>
+        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:1.5rem;text-align:center">
+          <div style="font-size:3rem;margin-bottom:0.8rem">🚀</div>
+          <p style="font-size:0.9rem;color:var(--text2);margin-bottom:1.2rem">The Nexus Agent Web UI is live at:</p>
+          <a href="https://nobletimefashion-pixel.github.io/AgenticSystem/" target="_blank" style="display:inline-block;background:var(--accent);color:#fff;padding:14px 36px;border-radius:10px;font-weight:600;font-size:1rem;text-decoration:none;transition:background .2s,transform .15s" onmouseover="this.style.background='var(--accent2)'" onmouseout="this.style.background='var(--accent)'">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="vertical-align:middle;margin-right:8px"><path d="M18 10h-1.5A5.5 5.5 0 0 0 11 4H7a4 4 0 0 0-4 4v1a5 5 0 0 0 5 5h1"/><path d="M6 14l4 4 4-4"/><path d="M12 18V4"/></svg>
+            Launch Nexus Agent
+          </a>
+          <p style="font-size:0.78rem;color:var(--text2);margin-top:1rem">FastAPI + WebSocket • Dark-themed SPA • Full tool access</p>
+        </div>
+        <div style="margin-top:1rem;display:flex;flex-wrap:wrap;gap:0.5rem;justify-content:center">
+          <span style="background:rgba(255,159,67,0.1);border:1px solid rgba(255,159,67,0.3);padding:4px 12px;border-radius:6px;font-size:0.75rem;color:var(--orange)">No install required</span>
+          <span style="background:rgba(61,214,140,0.1);border:1px solid rgba(61,214,140,0.3);padding:4px 12px;border-radius:6px;font-size:0.75rem;color:var(--green)">Real-time WebSocket</span>
+          <span style="background:rgba(124,92,252,0.1);border:1px solid rgba(124,92,252,0.3);padding:4px 12px;border-radius:6px;font-size:0.75rem;color:var(--accent)">All 30+ tools</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="text-align:center;margin-top:1rem">
+      <p style="color:var(--text2);font-size:0.9rem">Or run the web UI locally:</p>
+      <div class="terminal-block" style="max-width:500px;margin:0.8rem auto 0">
+        <div class="body" style="font-size:0.78rem;padding:0.7rem 1rem">
+          <div><span class="prompt">$</span> python main.py --ui --ui-host 0.0.0.0</div>
+          <div><span style="color:var(--text2)">🌐 Nexus Agent UI → http://0.0.0.0:7860</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── Footer ───────────────────────────────────────────────── -->
+<footer>
+  <p>Nexus Agent — Built with ❤️ &nbsp;|&nbsp; <a href="https://github.com/nobletimefashion-pixel/Agentic-AI-" target="_blank">GitHub</a> &nbsp;|&nbsp; <a href="https://nobletimefashion-pixel.github.io/AgenticSystem/" target="_blank">Live App</a></p>
+  <p style="margin-top:0.4rem;font-size:0.78rem">AI Coding Agent for the Terminal — <a href="https://nobletimefashion-pixel.github.io/AgenticSystem/" target="_blank" style="color:var(--accent);text-decoration:none">try it now</a></p>
+</footer>
+
+<script>
+  // ─── Particles ────────────────────────────────────────────────
+  (function initParticles() {
+    const c = document.getElementById('particles');
+    const ctx = c.getContext('2d');
+    let w, h, particles = [];
+
+    function resize() { w = c.width = window.innerWidth; h = c.height = window.innerHeight; }
+    window.addEventListener('resize', resize); resize();
+
+    for (let i = 0; i < 120; i++) {
+      particles.push({
+        x: Math.random() * w, y: Math.random() * h,
+        vx: (Math.random() - 0.5) * 0.3,
+        vy: (Math.random() - 0.5) * 0.3,
+        r: Math.random() * 1.5 + 0.3
+      });
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, w, h);
+      for (let p of particles) {
+        p.x += p.vx; p.y += p.vy;
+        if (p.x < 0 || p.x > w) p.vx *= -1;
+        if (p.y < 0 || p.y > h) p.vy *= -1;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(124,92,252,0.18)'; ctx.fill();
+      }
+      // connections
+      for (let i = 0; i < particles.length; i++) {
+        for (let j = i + 1; j < particles.length; j++) {
+          const dx = particles[i].x - particles[j].x, dy = particles[i].y - particles[j].y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 130) {
+            ctx.beginPath(); ctx.moveTo(particles[i].x, particles[i].y);
+            ctx.lineTo(particles[j].x, particles[j].y);
+            ctx.strokeStyle = `rgba(124,92,252,${0.06 * (1 - dist / 130)})`;
+            ctx.stroke();
+          }
+        }
+      }
+      requestAnimationFrame(draw);
+    }
+    draw();
+  })();
+
+  // ─── Fade-in on scroll ────────────────────────────────────────
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+  }, { threshold: 0.08 });
+
+  document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
+
+  // ─── Webhook simulation ───────────────────────────────────────
+  const EVENT_TYPES = [
+    { tag: 'in', label: 'IN', desc: 'User message received' },
+    { tag: 'out', label: 'OUT', desc: 'Agent text delta — streaming response' },
+    { tag: 'act', label: 'ACT', desc: 'Tool call: grep — searching patterns' },
+    { tag: 'act', label: 'ACT', desc: 'Tool call: read_file — reading source' },
+    { tag: 'out', label: 'OUT', desc: 'Agent text complete' },
+    { tag: 'act', label: 'ACT', desc: 'Tool call: edit — modifying 2 files' },
+    { tag: 'out', label: 'OUT', desc: 'Agent text delta — summarizing changes' },
+    { tag: 'act', label: 'ACT', desc: 'Tool call: shell — running tests' },
+    { tag: 'out', label: 'OUT', desc: 'Agent text complete — task done' },
+    { tag: 'sys', label: 'SYS', desc: 'after_agent hook triggered' },
+  ];
+  let evtCount = 0, toolCount = 0;
+
+  function addEvent(type, text) {
+    const container = document.getElementById('whEvents');
+    const evt = document.createElement('div');
+    evt.className = 'evt';
+    evt.innerHTML = `<span class="tag ${type.tag}">${type.label}</span><span class="msg">${text}</span>`;
+    container.appendChild(evt);
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function simulateWebhook() {
+    const btn = document.querySelector('#webhook-demo .wh-bar .wh-actions button');
+    btn.disabled = true; btn.textContent = '▶ Streaming...';
+    let i = 0;
+    const interval = setInterval(() => {
+      if (i >= EVENT_TYPES.length) {
+        clearInterval(interval);
+        btn.disabled = false; btn.textContent = '▶ Simulate';
+        return;
+      }
+      const ev = EVENT_TYPES[i];
+      addEvent(ev, ev.desc);
+      evtCount++;
+      if (ev.tag === 'act') toolCount++;
+      document.getElementById('evtCount').textContent = evtCount;
+      document.getElementById('toolCount').textContent = toolCount;
+      document.getElementById('lastTrigger').textContent = ev.label === 'SYS' ? 'after_agent' : (ev.label === 'OUT' ? 'text_delta' : (ev.label === 'ACT' ? 'before_tool' : 'agent_start'));
+
+      // animate chart bars
+      const bars = document.querySelectorAll('#whChart .bar');
+      bars.forEach((b, idx) => {
+        const h = 10 + Math.sin(Date.now() / 800 + idx * 0.7) * 35 + Math.random() * 20;
+        b.style.height = Math.min(Math.max(h, 4), 98) + '%';
+      });
+
+      i++;
+    }, 400);
+  }
+
+  function clearEvents() {
+    document.getElementById('whEvents').innerHTML = `
+      <div class="evt"><span class="tag sys">SYS</span><span class="msg">Nexus Agent webhook monitor ready</span></div>
+      <div class="evt"><span class="tag sys">SYS</span><span class="msg">Listening for agent lifecycle events...</span></div>
+    `;
+    evtCount = 0; toolCount = 0;
+    document.getElementById('evtCount').textContent = '0';
+    document.getElementById('toolCount').textContent = '0';
+    document.getElementById('lastTrigger').textContent = '—';
+  }
+</script>
+</body>
+</html>
